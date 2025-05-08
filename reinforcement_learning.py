@@ -45,6 +45,9 @@ class DQN(gym.Env):
         loft = [f for f in self.active_objects if f.getClass() == "Loft"][0]
         self._target_location = [loft.x, loft.y]
 
+        # Used to ensure that clicking anywhere on the map will move the pigeon to that location.
+        self.window.bind("<Button-1>", self.click_handler)
+
         # THIS OBSERVATION SPACE IS REQUIRED FOR GYM IN THE INIT, BUT IN THE REST OF THE CODE IT IS COMPLETELY IGNORED.
         self.observation_space = gym.spaces.Dict(
             {
@@ -123,21 +126,56 @@ class DQN(gym.Env):
 
     # Used to get the current location of the pigeon and the loft (observations)
     def get_observations(self):
-        # Find a matrix, but with all 0s except for the pigeon's vision
+        # Find a matrix, but with all 0s except for the pigeon's vision in a circular area.
         environ_matrix = self.env_orig.create_matrix(X_SIZE, Y_SIZE)
         pigeon_matrix = np.zeros([X_SIZE, Y_SIZE])
         # This function creates a "mask" to show only certain values as True, therefore I am hoping this input will only reveal certain parts of the matrix to the pigeon.
         mask = self.env_orig.np_circle_func(self.pigeon.x, self.pigeon.y, self.pigeon.viewing_distance, environ_matrix)
         pigeon_matrix[mask] = environ_matrix[mask.T]
 
-        # Find a matrix but with all 0s except for the pigeon's memory of the loft.
+        # Find a matrix but with all 0s except for the pigeon's memory of the loft in a circular area.
         loft_matrix = np.zeros([X_SIZE, Y_SIZE])
         mask = self.env_orig.np_circle_func(self._target_location[0], self._target_location[1], self.pigeon.memory_radius, environ_matrix)
         loft_matrix[mask] = environ_matrix[mask.T]
 
-        # Geomagnetic values for the pigeon and the loft.
+        # Initialising reduced size versions to reduce model complexity
+        pigeon_view = np.zeros([int(self.pigeon.viewing_distance*2), int(self.pigeon.viewing_distance*2)])
+        loft_view = np.zeros([int(self.pigeon.memory_radius*2), int(self.pigeon.memory_radius*2)])
 
-        output = pigeon_matrix.flatten() + loft_matrix.flatten()
+        # Todo, put all this code in a helper function later if cba.
+        # Ensuring the pigeon_view is always the same size, even if pigeon is against the border.
+        view_min_x_pigeon = max(-int(round(self.pigeon.x) - self.pigeon.viewing_distance - 1), 0) # Extra -1 to account for 0 as an element
+        view_max_x_pigeon = int(min(X_SIZE - int(round(self.pigeon.x) + self.pigeon.viewing_distance), 0) + self.pigeon.viewing_distance * 2)
+        view_min_y_pigeon = max(-int(round(self.pigeon.y) - self.pigeon.viewing_distance - 1), 0) # Extra -1 to account for 0 as an element
+        view_max_y_pigeon = int(min(Y_SIZE - int(round(self.pigeon.y) + self.pigeon.viewing_distance), 0) + self.pigeon.viewing_distance * 2)
+        # Ensuring the loft_view is always the same size, even if loft is against the border.
+        view_min_x_loft = max(-int(self._target_location[0] - self.pigeon.memory_radius - 1), 0) # Extra -1 to account for 0 as an element
+        view_max_x_loft = int(min(X_SIZE - int(self._target_location[0] + self.pigeon.memory_radius), 0) + self.pigeon.memory_radius * 2)
+        view_min_y_loft = max(-int(self._target_location[1] - self.pigeon.memory_radius - 1), 0) # Extra -1 to account for 0 as an element
+        view_max_y_loft = int(min(Y_SIZE - int(self._target_location[1] + self.pigeon.memory_radius), 0) + self.pigeon.memory_radius * 2)
+        # These are the pigeon positions inside the matrix, accounting for interactions with the border, as if an input of -12 is given, it takes from the back of the matrix.
+        min_x_pigeon = max(int(round(self.pigeon.x) - self.pigeon.viewing_distance), 0)
+        max_x_pigeon = int(round(self.pigeon.x) + self.pigeon.viewing_distance)
+        min_y_pigeon = max(int(round(self.pigeon.y) - self.pigeon.viewing_distance), 0)
+        max_y_pigeon = int(round(self.pigeon.y) + self.pigeon.viewing_distance)
+        # These are the loft positions inside the matrix, accounting for interactions with the border, as if an input of -12 is given, it takes from the back of the matrix.
+        min_x_loft = max(int(round(self.pigeon.x) - self.pigeon.viewing_distance), 0)
+        max_x_loft = int(round(self.pigeon.x) + self.pigeon.viewing_distance)
+        min_y_loft = max(int(round(self.pigeon.y) - self.pigeon.viewing_distance), 0)
+        max_y_loft = int(round(self.pigeon.y) + self.pigeon.viewing_distance)
+
+        # This takes the masked values from pigeon_matrix and extracts the area to a smaller matrix, ensuring all values are preserved, even if against the border.
+        pigeon_view[view_min_x_pigeon:view_max_x_pigeon, view_min_y_pigeon:view_max_y_pigeon] = pigeon_matrix[min_x_pigeon:max_x_pigeon, min_y_pigeon:max_y_pigeon]
+        loft_view[view_min_x_loft:view_max_x_loft, view_min_y_loft:view_max_y_loft]= loft_matrix[min_x_loft:max_x_loft, min_y_loft:max_y_loft]
+
+        # TODO NOW RUN MAX POOLING ON THESE VALUES.
+
+        # Geomagnetic values for the pigeon and the loft.
+        pigeon_geomag = self.pigeon.current_geomag_loc
+        loft_geomag = self.pigeon.geomag_loft
+
+        # TODO DO I NEED TO MAKE COMPARISONS BETWEEN THESE OR IS JUST INPUTTING THEM FINE?
+        output = list(pigeon_view.flatten()) + list(loft_view.flatten())
 
         return output
 
@@ -147,6 +185,13 @@ class DQN(gym.Env):
             return (1 / self.pigeon.dist_from_loft) * 100
         else:
             return 0
+
+    # This is added here so that at any point, you can click an area on the map and the pigeon will move there. Necessary for development.
+    def click_handler(self, event):
+        print("CALLED")
+        if event.num == 1:
+            self.pigeon.x = event.x
+            self.pigeon.y = event.y
 
     # Code taken from: https://docs.pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
     # TODO REFERENCE
@@ -164,7 +209,7 @@ class DQN(gym.Env):
         state_size = len(state) # TODO may need to change this, see performance first
         action_size = self.action_space.n
 
-        print(state_size)
+        # print(state_size)
 
         iterations = 0
 

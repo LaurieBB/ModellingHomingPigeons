@@ -13,6 +13,8 @@ X_SIZE = 1000
 Y_SIZE = 1000
 UPDATE_SPEED = 50
 
+# TODO ADD CODE IN HERE TO MOVE PIGEON BY CLICKING - in "reinforcement_learning" init and function
+
 class GeneticAlgorithm:
     def __init__(self):
         # Used in update to show a "real world" time passing in the canvas
