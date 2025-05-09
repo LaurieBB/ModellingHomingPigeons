@@ -16,6 +16,7 @@ pygad - 3.4.0
 
 gymnasium - 1.1.1
 
+lxml_html_clean - 0.4.2
 
 
 # DONT FORGET TO REINSTALL AND RESET THE VENV BEFORE SUBMISSION
