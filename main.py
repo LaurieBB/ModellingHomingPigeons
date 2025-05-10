@@ -1,4 +1,5 @@
 import datetime
+import random
 import time
 import tkinter as tk
 import threading
@@ -14,8 +15,9 @@ UPDATE_SPEED = 50
 
 # TODO GO THROUGH AND REFACTOR SO PASSIVE_OBJECTS, ACTIVE_OBJECTS, GEOMAG_MAP ETC. ARE ALL ACCESS THROUGH AN ENVIRONMENT INSTANCE. NOT PASSED THROUGH FUNCS
 
+# THis is just random movements, as a test and a baseline
 def update(canvas, passive_objects, active_objects, geomag_map, real_time, pigeon):
-    angle = 90
+    angle = random.randint(0, 360)
     pigeon.update(canvas, passive_objects, active_objects, geomag_map, angle, UPDATE_SPEED)
 
     print(pigeon.geomagDifference())
@@ -27,7 +29,8 @@ def update(canvas, passive_objects, active_objects, geomag_map, real_time, pigeo
 
     canvas.after(UPDATE_SPEED, update, canvas, passive_objects, active_objects, geomag_map, real_time, pigeon)
 
-def main():
+# Just calls update above to start random movement.
+def test():
     window = tk.Tk()
     window.resizable(False,False)
 
@@ -52,5 +55,4 @@ def genetic_algorithm():
 
 DQN()
 # genetic_algorithm()
-# main()
 # test()

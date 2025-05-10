@@ -113,6 +113,8 @@ class Pigeon:
         elif self.y <= 0:
             self.y = 1
 
+        self.no_moves += 1
+
         canvas.delete(self.name)
         canvas.delete("view_distance")
         self.drawPigeon(canvas)
