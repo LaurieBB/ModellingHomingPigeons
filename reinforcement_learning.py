@@ -4,6 +4,7 @@ import gymnasium as gym
 from typing import Optional
 import tkinter as tk
 import threading
+import pickle
 
 # Used for Deep Q Learning
 import torch
@@ -107,6 +108,7 @@ class DQN(gym.Env):
         self.pigeon.xv = math.sin(math.radians(action)) * hypotenuse
         self.pigeon.yv = math.cos(math.radians(action)) * hypotenuse
 
+        # Before the step function actually updates any values, the previous location is saved, as it is used in the reward function
         prev_loc = self.pigeon.dist_from_loft
 
         # Runs the movement and changes the xvalue, unless the pigeon is dead already
@@ -143,65 +145,92 @@ class DQN(gym.Env):
 
         return observations, reward, terminated
 
-    # Used to get the current location of the pigeon and the loft (observations)
+    # Used to get the current location of the pigeon and the loft (observations) - always returns a list
     def get_observations(self):
-        # Find a matrix, but with all 0s except for the pigeon's vision in a circular area.
-        # environ_matrix = self.env_orig.create_matrix(X_SIZE, Y_SIZE)
-        # pigeon_matrix = np.zeros([X_SIZE, Y_SIZE])
-        # # This function creates a "mask" to show only certain values as True, therefore I am hoping this input will only reveal certain parts of the matrix to the pigeon.
-        # mask = self.env_orig.np_circle_func(self.pigeon.x, self.pigeon.y, self.pigeon.viewing_distance, environ_matrix)
-        # pigeon_matrix[mask] = environ_matrix[mask.T]
-        #
-        # # Find a matrix but with all 0s except for the pigeon's memory of the loft in a circular area.
-        # loft_matrix = np.zeros([X_SIZE, Y_SIZE])
-        # mask = self.env_orig.np_circle_func(self._target_location[0], self._target_location[1], self.pigeon.memory_radius, environ_matrix)
-        # loft_matrix[mask] = environ_matrix[mask.T]
-        #
-        # # Initialising reduced size versions to reduce model complexity
-        # pigeon_view = np.zeros([int(self.pigeon.viewing_distance*2), int(self.pigeon.viewing_distance*2)])
-        # loft_view = np.zeros([int(self.pigeon.memory_radius*2), int(self.pigeon.memory_radius*2)])
-        #
-        # # Todo, put all this code in a helper function later if cba.
-        # # Ensuring the pigeon_view is always the same size, even if pigeon is against the border.
-        # view_min_x_pigeon = max(-int(round(self.pigeon.x) - self.pigeon.viewing_distance - 1), 0) # Extra -1 to account for 0 as an element
-        # view_max_x_pigeon = int(min(X_SIZE - int(round(self.pigeon.x) + self.pigeon.viewing_distance), 0) + self.pigeon.viewing_distance * 2)
-        # view_min_y_pigeon = max(-int(round(self.pigeon.y) - self.pigeon.viewing_distance - 1), 0) # Extra -1 to account for 0 as an element
-        # view_max_y_pigeon = int(min(Y_SIZE - int(round(self.pigeon.y) + self.pigeon.viewing_distance), 0) + self.pigeon.viewing_distance * 2)
-        # # Ensuring the loft_view is always the same size, even if loft is against the border.
-        # view_min_x_loft = max(-int(self._target_location[0] - self.pigeon.memory_radius - 1), 0) # Extra -1 to account for 0 as an element
-        # view_max_x_loft = int(min(X_SIZE - int(self._target_location[0] + self.pigeon.memory_radius), 0) + self.pigeon.memory_radius * 2)
-        # view_min_y_loft = max(-int(self._target_location[1] - self.pigeon.memory_radius - 1), 0) # Extra -1 to account for 0 as an element
-        # view_max_y_loft = int(min(Y_SIZE - int(self._target_location[1] + self.pigeon.memory_radius), 0) + self.pigeon.memory_radius * 2)
-        # # These are the pigeon positions inside the matrix, accounting for interactions with the border, as if an input of -12 is given, it takes from the back of the matrix.
-        # min_x_pigeon = max(int(round(self.pigeon.x) - self.pigeon.viewing_distance), 0)
-        # max_x_pigeon = int(round(self.pigeon.x) + self.pigeon.viewing_distance)
-        # min_y_pigeon = max(int(round(self.pigeon.y) - self.pigeon.viewing_distance), 0)
-        # max_y_pigeon = int(round(self.pigeon.y) + self.pigeon.viewing_distance)
-        # # These are the loft positions inside the matrix, accounting for interactions with the border, as if an input of -12 is given, it takes from the back of the matrix.
-        # min_x_loft = max(int(round(self._target_location[0]) - self.pigeon.memory_radius), 0)
-        # max_x_loft = int(round(self._target_location[0]) + self.pigeon.memory_radius)
-        # min_y_loft = max(int(round(self._target_location[1]) - self.pigeon.memory_radius), 0)
-        # max_y_loft = int(round(self._target_location[1]) + self.pigeon.memory_radius)
-        #
-        # # This takes the masked values from pigeon_matrix and extracts the area to a smaller matrix, ensuring all values are preserved, even if against the border.
-        # pigeon_view[view_min_x_pigeon:view_max_x_pigeon, view_min_y_pigeon:view_max_y_pigeon] = pigeon_matrix[min_x_pigeon:max_x_pigeon, min_y_pigeon:max_y_pigeon]
-        # loft_view[view_min_x_loft:view_max_x_loft, view_min_y_loft:view_max_y_loft] = loft_matrix[min_x_loft:max_x_loft, min_y_loft:max_y_loft]
-        #
-        # # Max Pooling to reduce the size of the input space for DQN
-        # pigeon_view = skimage.measure.block_reduce(pigeon_view, (3,3), np.max)
-        # loft_view = skimage.measure.block_reduce(loft_view, (3,3), np.max)
+        # This returns matrices of the pigeon view, and the loft memory
+        pigeon_view, loft_view = self.generate_views()
+
+        # Max Pooling to reduce the size of the input space for DQN
+        pigeon_view = skimage.measure.block_reduce(pigeon_view, (3,3), np.max)
+        loft_view = skimage.measure.block_reduce(loft_view, (3,3), np.max)
 
         # Geomagnetic values for the pigeon and the loft.
         pigeon_geomag = self.pigeon.current_geomag_loc
         loft_geomag = self.pigeon.geomag_loft
 
-        # TODO DO I NEED TO MAKE COMPARISONS BETWEEN THESE OR IS JUST INPUTTING THEM FINE?
-        # output = list(pigeon_view.flatten()) + list(loft_view.flatten()) + pigeon_geomag + loft_geomag
-        output = self.geomag_diff(pigeon_geomag, loft_geomag)
+        # Currently outputting only the difference between the geomagnetic values.
+        output = list(self.geomag_diff(pigeon_geomag, loft_geomag)) + list(pigeon_view.flatten()) + list(loft_view.flatten())
 
         return output
 
-    # todo currently testing this function to see if finding the difference between the geomag vals, makes it learn
+    # This finds matrices of the areas surrounding the pigeon and the loft. As it is necessary for the input to be in an understandable, and consistent size.
+    def generate_views(self):
+        # Either create the environment matrix, or load it from a pickle, to save processing time.
+        # TODO COME BACK HERE, BECAUSE THIS SOLUTION WILL NOT WORK FOR CHANGING ENVIRONMENTS
+        try:
+            with open("data/enviro_info/enviro_matrix.pkl", "rb") as f:
+                environ_matrix = pickle.load(f)
+        except (FileNotFoundError, EOFError):
+            environ_matrix = self.env_orig.create_matrix(X_SIZE, Y_SIZE)
+            with open("data/enviro_info/enviro_matrix.pkl", "wb") as f:
+                pickle.dump(environ_matrix, f)
+
+        # This finds the area in the full matrix that just the pigeon can see.
+        pigeon_matrix = np.zeros((X_SIZE, Y_SIZE))
+        mask = self.env_orig.np_circle_func(self.pigeon.x, self.pigeon.y, self.pigeon.viewing_distance, environ_matrix)
+        pigeon_matrix[mask] = environ_matrix[mask.T] # Generate the masked version of the full environment, showing only the circular pigeons view.
+
+        loft_matrix = np.zeros((X_SIZE, Y_SIZE))
+        mask = self.env_orig.np_circle_func(self._target_location[0], self._target_location[1],
+                                            self.pigeon.memory_radius, environ_matrix)
+        loft_matrix[mask] = environ_matrix[mask.T] # Generate the masked version of the full environment, showing only the circular loft memory
+
+        # Get radius distances for the loft and the pigeon.
+        viewing_distance = int(self.pigeon.viewing_distance)
+        memory_radius = int(self.pigeon.memory_radius)
+
+        view_size_pigeon = viewing_distance * 2
+        view_size_loft = memory_radius * 2
+
+        # Initialise matrices for the pigeon view size and loft memory.
+        pigeon_view = np.zeros([view_size_pigeon, view_size_pigeon])
+        loft_view = np.zeros([view_size_loft, view_size_loft])
+
+        # Round and convert positions to int as is necessary, due to them being float values.
+        pige_x = int(round(self.pigeon.x))
+        pige_y = int(round(self.pigeon.y))
+        loft_x = int(round(self._target_location[0]))
+        loft_y = int(round(self._target_location[1]))
+
+        # Helper function, to take the important information from the large matrices, and put it in the "_view" oens.
+        def find_view(matrix, center_x, center_y, radius, view_matrix):
+            matrix_h, matrix_w = matrix.shape
+
+            # Find either the real values in the main matrix, must be highest or 0, as otherwise it can return incorrect values.
+            # e.g. -12 will return from wrong side of matrix
+            x_min = max(center_x - radius, 0)
+            x_max = min(center_x + radius, matrix_h)
+            y_min = max(center_y - radius, 0)
+            y_max = min(center_y + radius, matrix_w)
+
+            # Placement in the view matrix.
+            vx_min = radius - (center_x - x_min)
+            vx_max = vx_min + (x_max - x_min)
+            vy_min = radius - (center_y - y_min)
+            vy_max = vy_min + (y_max - y_min)
+
+            # Insert cropped region into fixed-size view
+            view_matrix[vx_min:vx_max, vy_min:vy_max] = matrix[x_min:x_max, y_min:y_max]
+
+            return view_matrix
+
+        # Find the new view matrices
+        pigeon_view = find_view(pigeon_matrix, pige_x, pige_y, viewing_distance, pigeon_view)
+        loft_view = find_view(loft_matrix, loft_x, loft_y, memory_radius, loft_view)
+
+        return pigeon_view, loft_view
+
+    # This function is used to return the difference between the geomagnetic values, for the observations of the agent.
     def geomag_diff(self, pige_geo, loft_geo):
         output = []
         for x in range(0, len(pige_geo)):
@@ -215,11 +244,11 @@ class DQN(gym.Env):
     def reward_function(self, previous_location):
         if self.pigeon.alive:
             if self.pigeon.dist_from_loft > previous_location:
-                reward = 1
-            else:
                 reward = 0
+            else:
+                reward = 1
         else:
-            reward = 0
+            reward = 1
 
         print(reward)
         return reward
@@ -250,13 +279,14 @@ class DQN(gym.Env):
         )
 
         state = self.get_observations()
-        state_size = len(state) # TODO may need to change this, see performance first
+        state_size = len(state)
         action_size = self.action_space.n
 
         print(state_size)
 
         iterations = 0
 
+        # Initialise the Networks
         policy_net = DeepQLearningNetwork(state_size, action_size).to(device)
         target_net = DeepQLearningNetwork(state_size, action_size).to(device)
         target_net.load_state_dict(policy_net.state_dict())
@@ -305,7 +335,7 @@ class DQN(gym.Env):
             non_final_next_states = torch.cat([s for s in batch.next_state if s is not None])
             state_batch = torch.cat(batch.state)
             action_batch = torch.cat(batch.action)
-            reward_batch = torch.cat(batch.reward) # TODO ERROR HERE YESTERDAY: "expected Tensor as element 52 in argument 0, but got int"
+            reward_batch = torch.cat(batch.reward)
 
             # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
             # columns of actions taken. These are the actions which would've been taken
