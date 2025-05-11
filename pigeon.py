@@ -26,6 +26,7 @@ class Pigeon:
         # Performance Metrics
         self.no_moves = 0 # This is used as a performance metric to see how many move updates it took the pigeon to reach its goal
         self.dist_from_loft = 1000 # This is used at the end as a performance metric to see how close it got to the goal.
+        self.dist_moved = 0
 
         # This is used to scan through all active objects, to ensure the starting point of the pigeon is valid
         overlap_flag = True
@@ -101,8 +102,13 @@ class Pigeon:
 
     # This is the movement per second, currently
     def move(self, canvas):
-        self.x += self.xv
-        self.y += self.yv
+        new_x = self.x + self.xv
+        new_y = self.y + self.yv
+
+        self.dist_moved += math.sqrt((new_x-self.x)**2 + (new_y-self.y)**2)
+
+        self.x = new_x
+        self.y = new_y
 
         # TODO TESTING ALLOWING PIGEON TO EXIT THE AREA. SHOULD BE PUNISHED BY REWARD FUNCTION INSTEAD OF BOUNDARY
         # # Handle boundary collisions

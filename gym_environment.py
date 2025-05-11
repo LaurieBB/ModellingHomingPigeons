@@ -62,6 +62,11 @@ class GymEnvironment(gym.Env):
         self.pigeon_start_loc = [self.pigeon.x, self.pigeon.y]
         self._agent_location = [self.pigeon.x, self.pigeon.y]
 
+        # Draw euclidian distance to the loft from pigeon start point
+        self.canvas.delete("euc_line")
+        self.canvas.create_line(self.pigeon_start_loc[0], self.pigeon_start_loc[1], self._target_location[0], self._target_location[1], dash=(5,1), fill="darkblue", tag="euc_line")
+        self.canvas.create_oval(self.pigeon_start_loc[0] - 5, self.pigeon_start_loc[1] - 5, self.pigeon_start_loc[0] + 5, self.pigeon_start_loc[1] + 5, fill="darkblue", outline="black", tag="euc_line")
+
         # Get the observations to return the newest observations after reset
         observations = self.get_observations()
 
@@ -97,10 +102,11 @@ class GymEnvironment(gym.Env):
 
             # End if pigeon is in same location as loft, it may seem like a low value, however the pigeon is also
             if self.pigeon.dist_from_loft <= 20:
+                print("MY PIGEON IS HOME!!!")
                 terminated = True
                 truncated = False
             # If the pigeon has done too many moves
-            elif self.pigeon.no_moves >= 3000:
+            elif self.pigeon.no_moves >= 5000:
                 terminated = False
                 truncated = True
             # No issues.
@@ -143,14 +149,13 @@ class GymEnvironment(gym.Env):
         pigeon_geomag = self.pigeon.current_geomag_loc
         loft_geomag = self.pigeon.geomag_loft
 
-        # TESTING NEW OBSERVATION SPACE
+        # Below is the list observation space
         # pigeon_view = self.env_orig.obj_in_view(self.pigeon.x, self.pigeon.y, self.pigeon.viewing_distance)
         # loft_view = self.env_orig.obj_in_view(self._target_location[0], self._target_location[1], self.pigeon.memory_radius)
         # pigeon_view.append(self.env_orig.act_obj_in_view(self.pigeon.x, self.pigeon.y, self.pigeon.viewing_distance))
 
-        # Currently outputting only the difference between the geomagnetic values.
         # output = list(self.geomag_diff(pigeon_geomag, loft_geomag)) + list(pigeon_view.flatten()) + list(loft_view.flatten())
-        output = list(self.geomag_diff(pigeon_geomag, loft_geomag)) + list(pigeon_view.flatten()) + list(loft_view.flatten())
+        output = list(pigeon_geomag) + list(pigeon_view.flatten()) + list(loft_geomag) + list(loft_view.flatten())
 
         return output
 
@@ -249,6 +254,7 @@ class GymEnvironment(gym.Env):
 
     # Reward function to indicate good/bad solutions
     def reward_function(self, prev_loc):
+        # todo reward needs to be in a better range. Death = -10, Home = +10
         reward = 0
 
         # Sinuosity - how close to the euclidian distance to the value the movement is.
@@ -256,9 +262,24 @@ class GymEnvironment(gym.Env):
         loft_loc = np.asarray(self._target_location)
         current_loc = np.asarray([self.pigeon.x, self.pigeon.y])
 
-        dist_from_euc_line = np.abs(np.cross(loft_loc - pige_start, pige_start - current_loc)) / norm(loft_loc - pige_start)
+        dist_from_euc_line = round(np.abs(np.cross(loft_loc - pige_start, pige_start - current_loc)) / norm(loft_loc - pige_start)/10, 3)
 
-        reward -= dist_from_euc_line/100
+        if dist_from_euc_line <= 1:
+            dist_from_euc_line = 1
+
+        reward += round(1/dist_from_euc_line, 3) # THIS HAS AN ERROR WHEN THE PIGEON MOVES BEHIND THE START POINT, IT HAS UNEVEN VALUES.
+
+        print("VALUE: ", round(1/dist_from_euc_line, 3))
+        # print(dist_from_euc_line)
+
+        euc_line = math.sqrt((pige_start[0]-loft_loc[0])**2 + (pige_start[1]-loft_loc[1])**2)
+        dist_from_loft = self.pigeon.dist_from_loft
+
+        # This calculates the ratio, to the nearest point on the euclidian line
+        # DONT KNOW IF IT IS ACTUALLY SINUOSITY, BUT WHATEVER.
+        sinuosity = round((self.pigeon.dist_moved + dist_from_euc_line) / (euc_line - dist_from_loft), 3) * 0.01
+
+        # print(sinuosity)
 
         # If moving towards home
         if self.pigeon.dist_from_loft < prev_loc:
@@ -272,14 +293,19 @@ class GymEnvironment(gym.Env):
 
         # If against a wall
         if self.pigeon.x < 1 or self.pigeon.y < 1 or self.pigeon.x > 999 or self.pigeon.y > 999:
-            reward -= 1
+            reward -= 3
 
         # If pigeon can see the loft
         if self.pigeon.dist_from_loft <= self.pigeon.viewing_distance:
             reward += 1
 
         # Pigeon distance from the loft
-        reward -= np.log(self.pigeon.dist_from_loft/100)
+        # scale_dist_from_loft = np.log(self.pigeon.dist_from_loft/100)
+        # reward -= scale_dist_from_loft
+
+        # Try penalising number of moves
+
+        print(reward)
 
         return reward
 
@@ -296,6 +322,9 @@ class GymEnvironment(gym.Env):
         villages = self.env_orig.villages
         towns = self.env_orig.towns
         cities = self.env_orig.cities
+
+        for item in active_obj:
+            item.image = None
 
         save_all = (passive_obj, active_obj, geo_mag, villages, towns, cities)
 

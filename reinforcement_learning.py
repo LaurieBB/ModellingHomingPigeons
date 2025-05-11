@@ -47,13 +47,13 @@ class DQN:
     # TODO REFERENCE
     def solve(self):
         # Hyperparameters using in DQN:
-        BATCH_SIZE = 5000 # BATCH_SIZE is the number of transitions sampled from the replay buffer
+        BATCH_SIZE = 512 # BATCH_SIZE is the number of transitions sampled from the replay buffer
         GAMMA = 0.99  # GAMMA is the discount factor
         EPS_START = 0.9  # EPS_START is the starting value of epsilon
         EPS_END = 0.05  # EPS_END is the final value of epsilon
         EPS_DECAY = 1000  # EPS_DECAY controls the rate of exponential decay of epsilon, higher means a slower decay
         TAU = 0.05  # TAU is the update rate of the target network
-        LR = 0.001  # LR is the learning rate of the ``AdamW`` optimizer
+        LR = 0.0001  # LR is the learning rate of the ``AdamW`` optimizer
 
         # Set the device to run on GPU, if applicable
         device = torch.device(
@@ -193,9 +193,11 @@ class DQN:
             'target_net_state_dict': target_net.state_dict(),
             'policy_net_state_dict': policy_net.state_dict(),
             'optimizer_state_dict': optimizer.state_dict()
-        }, "model_parameters/dqn_parameters1.pt")
+        }, "model_parameters/dqn_parameters.pt")
 
         self.env.save_env()
+
+        self.window.quit()
 
 
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
@@ -216,15 +218,31 @@ class ReplayMemory(object):
         return len(self.memory)
 
 
+# # The network layout used for training
+# class DeepQLearningNetwork(nn.Module):
+#     def __init__(self, state_size, action_size):
+#         super(DeepQLearningNetwork, self).__init__()
+#         self.fc1 = nn.Linear(state_size, 256)
+#         self.fc2 = nn.Linear(256, 256)
+#         self.fc3 = nn.Linear(256, action_size)
+#
+#     def forward(self, x):
+#         x = F.relu(self.fc1(x))
+#         x = F.relu(self.fc2(x))
+#         return self.fc3(x)
+
 # The network layout used for training
 class DeepQLearningNetwork(nn.Module):
     def __init__(self, state_size, action_size):
         super(DeepQLearningNetwork, self).__init__()
-        self.fc1 = nn.Linear(state_size, 256)
-        self.fc2 = nn.Linear(256, 256)
-        self.fc3 = nn.Linear(256, action_size)
+        self.sequential = nn.Sequential(
+            nn.Linear(state_size, 512),
+            nn.ReLU(),
+            nn.Linear(512, 512),
+            nn.ReLU(),
+            nn.Linear(512, action_size),
+        )
 
     def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        return self.fc3(x)
+        logits = self.sequential(x)
+        return logits
