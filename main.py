@@ -13,8 +13,6 @@ X_SIZE = 1000
 Y_SIZE = 1000
 UPDATE_SPEED = 50
 
-# TODO GO THROUGH AND REFACTOR SO PASSIVE_OBJECTS, ACTIVE_OBJECTS, GEOMAG_MAP ETC. ARE ALL ACCESS THROUGH AN ENVIRONMENT INSTANCE. NOT PASSED THROUGH FUNCS
-
 # THis is just random movements, as a test and a baseline
 def update(canvas, passive_objects, active_objects, geomag_map, real_time, pigeon):
     angle = random.randint(0, 360)

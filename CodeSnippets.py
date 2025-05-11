@@ -82,3 +82,24 @@ class Predator:
     @staticmethod
     def getClass():
         return "Predator"
+
+
+# This is the old reset function from gym_evironment.py, which is used to reset to whole new environment rather than just the bird, as is currently done.
+    def reset(self, seed: Optional[int] = None, options: Optional[dict] = None):
+        # We need the following line to seed self.np_random
+        super().reset(seed=seed) # taken from the website, unsure currently if necessary for me
+
+        # Run these to reset the environment and the pigeon locations
+        self.canvas.destroy()
+        self.canvas, self.passive_objects, self.active_objects, self.geomag_map = self.env_orig.initialise_environment(self.window, X_SIZE, Y_SIZE)
+        self.pigeon = Pigeon("Pigeon1", X_SIZE, Y_SIZE, self.passive_objects, self.active_objects, self.geomag_map)
+
+        # Define these as the new locations.
+        self._agent_location = [self.pigeon.x, self.pigeon.y]
+        loft = [f for f in self.active_objects if f.getClass() == "Loft"][0]
+        self._target_location = [loft.x, loft.y]
+
+        # Get the observations to return the newest observations after reset
+        observations = self.get_observations()
+
+        return observations

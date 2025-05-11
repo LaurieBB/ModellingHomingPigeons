@@ -51,28 +51,7 @@ class GymEnvironment(gym.Env):
 
         self.action_space = gym.spaces.Discrete(360)
 
-
-    # def reset(self, seed: Optional[int] = None, options: Optional[dict] = None):
-    #     # We need the following line to seed self.np_random
-    #     super().reset(seed=seed) # taken from the website, unsure currently if necessary for me
-    #
-    #     # Run these to reset the environment and the pigeon locations
-    #     self.canvas.destroy()
-    #     self.canvas, self.passive_objects, self.active_objects, self.geomag_map = self.env_orig.initialise_environment(self.window, X_SIZE, Y_SIZE)
-    #     self.pigeon = Pigeon("Pigeon1", X_SIZE, Y_SIZE, self.passive_objects, self.active_objects, self.geomag_map)
-    #
-    #     # Define these as the new locations.
-    #     self._agent_location = [self.pigeon.x, self.pigeon.y]
-    #     loft = [f for f in self.active_objects if f.getClass() == "Loft"][0]
-    #     self._target_location = [loft.x, loft.y]
-    #
-    #     # Get the observations to return the newest observations after reset
-    #     observations = self.get_observations()
-    #
-    #     return observations
-
-    # todo testing a new reset function that only resets the pigeons location, no other environment values.
-    # uncomment above if need to change.
+    # reset function, overriding the gymnasium required one, used to reset the agent to a random position in the map
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = None):
         # We need the following line to seed self.np_random
         super().reset(seed=seed) # taken from the website, unsure currently if necessary for me
@@ -135,6 +114,11 @@ class GymEnvironment(gym.Env):
         # Get the updated observations and reward for the step.
         observations = self.get_observations()
         reward = self.reward_function(prev_loc)
+
+        # Necessary if the pigeon goes too far out of bounds
+        if reward <= -10:
+            truncated = True
+            terminated = False
 
         # Set reward for if it is finished, terminated=reached goal, truncated=died/too many moves
         if terminated:
@@ -216,20 +200,33 @@ class GymEnvironment(gym.Env):
 
         # Helper function, to take the important information from the large matrices, and put it in the "_view" oens.
         def find_view(matrix, center_x, center_y, radius, view_matrix):
-            matrix_h, matrix_w = matrix.shape
+            matrix_w, matrix_h = matrix.shape
 
-            # Find either the real values in the main matrix, must be highest or 0, as otherwise it can return incorrect values.
-            # e.g. -12 will return from wrong side of matrix
-            x_min = max(center_x - radius, 0)
-            x_max = min(center_x + radius, matrix_h)
-            y_min = max(center_y - radius, 0)
-            y_max = min(center_y + radius, matrix_w)
+            # To deal with errors when pigeon outside the boundary
+            if matrix_w > center_x > 0 and matrix_h > center_y > 0:
+                # Find either the real values in the main matrix, must be highest or 0, as otherwise it can return incorrect values.
+                # e.g. -12 will return from wrong side of matrix
+                x_min = max(center_x - radius, 0)
+                x_max = min(center_x + radius, matrix_w)
+                y_min = max(center_y - radius, 0)
+                y_max = min(center_y + radius, matrix_h)
 
-            # Placement in the view matrix.
-            vx_min = radius - (center_x - x_min)
-            vx_max = vx_min + (x_max - x_min)
-            vy_min = radius - (center_y - y_min)
-            vy_max = vy_min + (y_max - y_min)
+                # Placement in the view matrix.
+                vx_min = radius - (center_x - x_min)
+                vx_max = vx_min + (x_max - x_min)
+                vy_min = radius - (center_y - y_min)
+                vy_max = vy_min + (y_max - y_min)
+            else:
+                x_min = 0
+                x_max = 0
+                y_min = 0
+                y_max = 0
+
+                # Placement in the view matrix.
+                vx_min = 0
+                vx_max = 0
+                vy_min = 0
+                vy_max = 0
 
             # Insert cropped region into fixed-size view
             view_matrix[vx_min:vx_max, vy_min:vy_max] = matrix[x_min:x_max, y_min:y_max]
@@ -250,8 +247,7 @@ class GymEnvironment(gym.Env):
 
         return output
 
-    # TODO FIX REWARD FUNCTION
-    # okay so this reward function works a lot better than the others, but wtf is the lower=better bs???
+    # Reward function to indicate good/bad solutions
     def reward_function(self, prev_loc):
         reward = 0
 
@@ -281,6 +277,9 @@ class GymEnvironment(gym.Env):
         # If pigeon can see the loft
         if self.pigeon.dist_from_loft <= self.pigeon.viewing_distance:
             reward += 1
+
+        # Pigeon distance from the loft
+        reward -= np.log(self.pigeon.dist_from_loft/100)
 
         print(reward)
 

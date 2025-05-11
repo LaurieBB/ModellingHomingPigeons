@@ -25,9 +25,7 @@ X_SIZE = 1000
 Y_SIZE = 1000
 
 #Todo This is running and learning but more possible ideas:
-# Could have the inputs of towns/villages etc. as a list of all possible and binary values if in view or not. This would make it more recognisable?
 # Could also try scaling values like the geomagnetic ones, might make it more interpretable.
-# Could also try and change the reward function to make it more complex.
 
 class DQN:
     def __init__(self):
@@ -49,12 +47,12 @@ class DQN:
     # TODO REFERENCE
     def solve(self):
         # Hyperparameters using in DQN:
-        BATCH_SIZE = 1028 # BATCH_SIZE is the number of transitions sampled from the replay buffer
+        BATCH_SIZE = 5000 # BATCH_SIZE is the number of transitions sampled from the replay buffer
         GAMMA = 0.99  # GAMMA is the discount factor
         EPS_START = 0.9  # EPS_START is the starting value of epsilon
         EPS_END = 0.05  # EPS_END is the final value of epsilon
         EPS_DECAY = 1000  # EPS_DECAY controls the rate of exponential decay of epsilon, higher means a slower decay
-        TAU = 0.005  # TAU is the update rate of the target network
+        TAU = 0.05  # TAU is the update rate of the target network
         LR = 0.001  # LR is the learning rate of the ``AdamW`` optimizer
 
         # Set the device to run on GPU, if applicable
@@ -170,7 +168,7 @@ class DQN:
                     next_state = torch.tensor(observation, device=device, dtype=torch.float32).flatten().unsqueeze(0)
 
                 # Store the transition in memory
-                memory.push(state, action, next_state, reward) # todo change this to include terminated if teh bird is dead
+                memory.push(state, action, next_state, reward)
 
                 # Move to the next state
                 state = next_state
@@ -189,6 +187,15 @@ class DQN:
 
                 if done:
                     break
+
+        torch.save({
+            'target_net_state_dict': target_net.state_dict(),
+            'policy_net_state_dict': policy_net.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict()
+        }, "model_parameters/dqn_parameters")
+
+        with open("model_parameters/environment.pkl", "wb") as f:
+            pickle.dump(self.env, f)
 
 
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
