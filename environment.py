@@ -277,21 +277,22 @@ class Environment:
         loft.drawLoft(canvas)
         self.active_objects.append(loft)
 
-        # Add City
-        city = City("City1", xsize, ysize, self.passive_objects)
-        city.drawCity(canvas)
-        self.passive_objects.append(city)
-        self.cities.append(city)
+        # Add Cities
+        for x in range(0, 2):
+            city = City(f"City{x}", xsize, ysize, self.passive_objects)
+            city.drawCity(canvas)
+            self.passive_objects.append(city)
+            self.cities.append(city)
 
         # Add Towns
-        for x in range(0, 15):
+        for x in range(0, 20):
             town = Town(f"Town{x}", xsize, ysize, self.passive_objects)
             town.drawTown(canvas)
             self.passive_objects.append(town)
             self.towns.append(town)
 
         # Add Village
-        for x in range(0, 30):
+        for x in range(0, 40):
             village = Village(f"Village{x}", xsize, ysize, self.passive_objects)
             village.drawVillage(canvas)
             self.passive_objects.append(village)
@@ -428,5 +429,50 @@ class Environment:
 
         circ = euc_dist_from_center <= radius
         return circ
+
+    # This returns a true or false list of passive objects in view of either pigeon or loft.
+    def obj_in_view(self, x, y, radius):
+        observation = []
+        for item in self.passive_objects:
+            if intersection(item.midpoint[0], item.midpoint[1], x, y, item.radius, radius):
+                observation.append(True)
+            else:
+                observation.append(False)
+
+        return observation
+
+    # This returns two values, one that is whether circles intersect, the other is if the bird is actually inside the area.
+    def act_obj_in_view(self, x, y, radius):
+        observation = []
+
+        for item in self.active_objects:
+            if item.getClass() == "Predator":
+                if intersection(item.x, item.y, x, y, item.radius, radius):
+                    observation.append(True)
+                    if in_area(item.x, item.y, x, y, item.radius):
+                        observation.append(True)
+                    else:
+                        observation.append(False)
+                else:
+                    observation.append(False)
+                    observation.append(False)
+
+            elif item.getClass() == "Loft":
+                if in_area(x, y, item.x, item.y, radius): # If it is a loft, the pigeon has to be able to see the centre (make it harder)
+                    observation.append(True)
+                else:
+                    observation.append(False)
+
+        return observation
+
+# This is used to show if two circles intersect, used often to stop objects overlapping in the environment.
+def in_area(x1, y1, x2, y2, r1):
+    bet_center = math.sqrt((x1-x2)**2 + (y1-y2)**2)
+
+    if bet_center <= r1:
+        return True
+    else:
+        return False
+
 
 

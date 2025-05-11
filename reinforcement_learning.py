@@ -29,7 +29,7 @@ Y_SIZE = 1000
 # Could also try scaling values like the geomagnetic ones, might make it more interpretable.
 # Could also try and change the reward function to make it more complex.
 
-class DQN():
+class DQN:
     def __init__(self):
         self.window = tk.Tk()
         self.window.resizable(False, False)
@@ -170,7 +170,7 @@ class DQN():
                     next_state = torch.tensor(observation, device=device, dtype=torch.float32).flatten().unsqueeze(0)
 
                 # Store the transition in memory
-                memory.push(state, action, next_state, reward)
+                memory.push(state, action, next_state, reward) # todo change this to include terminated if teh bird is dead
 
                 # Move to the next state
                 state = next_state

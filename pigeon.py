@@ -80,38 +80,40 @@ class Pigeon:
         self.memory_home = in_range
 
     def drawPigeon(self, canvas):
-        # This circle shows the pigeon's field of view. It is not large enough to see an entire square, but adds another level of complexity
-        canvas.create_oval(self.x - self.viewing_distance, self.y - self.viewing_distance, self.x + self.viewing_distance,
-                           self.y + self.viewing_distance, fill='', outline="black", width=1, tag="view_distance")
+        if 0 <= self.x <= 1000 and 0 <= self.y <= 1000:
+            # This circle shows the pigeon's field of view. It is not large enough to see an entire square, but adds another level of complexity
+            canvas.create_oval(self.x - self.viewing_distance, self.y - self.viewing_distance, self.x + self.viewing_distance,
+                               self.y + self.viewing_distance, fill='', outline="black", width=1, tag="view_distance")
 
-        # It's necessary to load the image outside of tkinter first, to resize and rotate it appropriately
-        if not self.saved_image:
-            self.saved_image = Image.open("data/images/Pigeon.png").convert("RGBA").resize((30,30))
-        angle = math.degrees(math.atan(self.xv/(self.yv + sys.float_info.epsilon)))
-        if self.yv >= 0:
-            angle += 180
-        rotated_image = self.saved_image.rotate(angle) # Used to get the appropriate angle to rotate the image by.
-        # The self.image has to be included to prevent the image from being garbage collected at the end of the function
-        self.image = ImageTk.PhotoImage(rotated_image)
+            # It's necessary to load the image outside of tkinter first, to resize and rotate it appropriately
+            if not self.saved_image:
+                self.saved_image = Image.open("data/images/Pigeon.png").convert("RGBA").resize((30,30))
+            angle = math.degrees(math.atan(self.xv/(self.yv + sys.float_info.epsilon)))
+            if self.yv >= 0:
+                angle += 180
+            rotated_image = self.saved_image.rotate(angle) # Used to get the appropriate angle to rotate the image by.
+            # The self.image has to be included to prevent the image from being garbage collected at the end of the function
+            self.image = ImageTk.PhotoImage(rotated_image)
 
-        canvas.create_image(self.x, self.y, image=self.image, anchor="center", tag=f"{self.name}")
-        canvas.tag_raise(f"{self.name}")
-        canvas.tag_raise("view_distance")
+            canvas.create_image(self.x, self.y, image=self.image, anchor="center", tag=f"{self.name}")
+            canvas.tag_raise(f"{self.name}")
+            canvas.tag_raise("view_distance")
 
     # This is the movement per second, currently
     def move(self, canvas):
         self.x += self.xv
         self.y += self.yv
 
-        # Handle boundary collisions
-        if self.x >= 1000:
-            self.x = 999
-        elif self.x <= 0:
-            self.x = 1
-        if self.y >= 1000:
-            self.y = 999
-        elif self.y <= 0:
-            self.y = 1
+        # TODO TESTING ALLOWING PIGEON TO EXIT THE AREA. SHOULD BE PUNISHED BY REWARD FUNCTION INSTEAD OF BOUNDARY
+        # # Handle boundary collisions
+        # if self.x >= 1000:
+        #     self.x = 999
+        # elif self.x <= 0:
+        #     self.x = 1
+        # if self.y >= 1000:
+        #     self.y = 999
+        # elif self.y <= 0:
+        #     self.y = 1
 
         self.no_moves += 1
 
@@ -164,7 +166,10 @@ class Pigeon:
 
     # Used to update the pigeons current geomagnetic position, to an accuracy of one grid square.
     def updateCurrentGeomag(self, geomag_map):
-        return geomag_map[int(self.x//100)][int(self.y//100)]
+        if 0 < self.x < 1000 and 0 < self.y < 1000:
+            return geomag_map[int(self.x//100)][int(self.y//100)]
+        else:
+            return [0,0,0,0,0,0,0]
 
     # Used to identify if the pigeon is in the sphere of the predator, and calculate chance it is killed, updating self.alive if it is.
     def pigeonInDanger(self, active_objects):
