@@ -152,6 +152,7 @@ class DQN:
         num_episodes = 50
 
         for i_episode in range(num_episodes):
+            print(f'Episode {i_episode}')
             # Initialize the environment and get its state
             state = self.env.reset()
             state = torch.tensor(state, dtype=torch.float32, device=device).flatten().unsqueeze(0)
@@ -192,10 +193,9 @@ class DQN:
             'target_net_state_dict': target_net.state_dict(),
             'policy_net_state_dict': policy_net.state_dict(),
             'optimizer_state_dict': optimizer.state_dict()
-        }, "model_parameters/dqn_parameters")
+        }, "model_parameters/dqn_parameters1.pt")
 
-        with open("model_parameters/environment.pkl", "wb") as f:
-            pickle.dump(self.env, f)
+        self.env.save_env()
 
 
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))

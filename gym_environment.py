@@ -281,8 +281,6 @@ class GymEnvironment(gym.Env):
         # Pigeon distance from the loft
         reward -= np.log(self.pigeon.dist_from_loft/100)
 
-        print(reward)
-
         return reward
 
     # This is added here so that at any point, you can click an area on the map and the pigeon will move there. Necessary for development.
@@ -290,3 +288,16 @@ class GymEnvironment(gym.Env):
         if event.num == 1:
             self.pigeon.x = event.x
             self.pigeon.y = event.y
+
+    def save_env(self):
+        passive_obj = self.env_orig.passive_objects
+        active_obj = self.env_orig.active_objects
+        geo_mag = self.env_orig.geo_map
+        villages = self.env_orig.villages
+        towns = self.env_orig.towns
+        cities = self.env_orig.cities
+
+        save_all = (passive_obj, active_obj, geo_mag, villages, towns, cities)
+
+        with open("model_parameters/environment.pkl", "wb") as f:
+            pickle.dump(save_all, f)
