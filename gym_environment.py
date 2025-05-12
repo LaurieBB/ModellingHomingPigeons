@@ -19,14 +19,21 @@ Y_SIZE = 1000
 
 # This class converts my own custom environment into one that is gymnasium compatible. This makes it easier to use with PyTorch etc.
 class GymEnvironment(gym.Env):
-    def __init__(self, window):
+    def __init__(self, draw=False, window=None):
         # My original environment class - that is being adapted to a Gymnasium environment
         self.env_orig = Environment()
 
-        # Define the agent and target location
-        self.canvas, self.passive_objects, self.active_objects, self.geomag_map = self.env_orig.initialise_environment(window, X_SIZE, Y_SIZE)
-        self.pigeon = Pigeon("Pigeon1", X_SIZE, Y_SIZE, self.passive_objects, self.active_objects, self.geomag_map)
-        self.pigeon.drawPigeon(self.canvas)
+        # Have to customise depending on if I am running a final test or not
+        if draw:
+            # Define the agent and target location
+            self.canvas, self.passive_objects, self.active_objects, self.geomag_map = self.env_orig.initialise_environment(window, X_SIZE, Y_SIZE)
+            self.pigeon = Pigeon("Pigeon1", X_SIZE, Y_SIZE, self.passive_objects, self.active_objects, self.geomag_map)
+            self.pigeon.drawPigeon(self.canvas)
+            self.draw = True
+        else:
+            self.passive_objects, self.active_objects, self.geomag_map = self.env_orig.initialise_environment_no_draw(X_SIZE, Y_SIZE)
+            self.pigeon = Pigeon("Pigeon1", X_SIZE, Y_SIZE, self.passive_objects, self.active_objects, self.geomag_map)
+            self.draw = False
 
         # Storing the pigeon start location
         self.pigeon_start_loc = [self.pigeon.x, self.pigeon.y]
@@ -61,11 +68,14 @@ class GymEnvironment(gym.Env):
         # Define these as the new locations.
         self.pigeon_start_loc = [self.pigeon.x, self.pigeon.y]
         self._agent_location = [self.pigeon.x, self.pigeon.y]
+        loft = [f for f in self.active_objects if f.getClass() == "Loft"][0]
+        self._target_location = [loft.x, loft.y]
 
-        # Draw euclidian distance to the loft from pigeon start point
-        self.canvas.delete("euc_line")
-        self.canvas.create_line(self.pigeon_start_loc[0], self.pigeon_start_loc[1], self._target_location[0], self._target_location[1], dash=(5,1), fill="darkblue", tag="euc_line")
-        self.canvas.create_oval(self.pigeon_start_loc[0] - 5, self.pigeon_start_loc[1] - 5, self.pigeon_start_loc[0] + 5, self.pigeon_start_loc[1] + 5, fill="darkblue", outline="black", tag="euc_line")
+        if self.draw:
+            # Draw euclidian distance to the loft from pigeon start point
+            self.canvas.delete("euc_line")
+            self.canvas.create_line(self.pigeon_start_loc[0], self.pigeon_start_loc[1], self._target_location[0], self._target_location[1], dash=(5,1), fill="darkblue", tag="euc_line")
+            self.canvas.create_oval(self.pigeon_start_loc[0] - 5, self.pigeon_start_loc[1] - 5, self.pigeon_start_loc[0] + 5, self.pigeon_start_loc[1] + 5, fill="darkblue", outline="black", tag="euc_line")
 
         # Get the observations to return the newest observations after reset
         observations = self.get_observations()
@@ -83,14 +93,17 @@ class GymEnvironment(gym.Env):
 
         # Runs the movement and changes the xvalue, unless the pigeon is dead already
         if self.pigeon.alive:
-            self.pigeon.move(self.canvas)
+            if self.draw:
+                self.pigeon.move(self.canvas)
+            else:
+                self.pigeon.move_no_draw()
 
         # Checks that the pigeon is alive, and not in a predator area, this function also works out probability of death and
         self.pigeon.pigeonInDanger(self.active_objects)
 
         # If alive, updates vision and geomagnetic location.
         if self.pigeon.alive:
-            self.pigeon.pigeon_vision = self.pigeon.getVision(self.passive_objects, self.active_objects)
+            self.pigeon.pigeon_vision = self.pigeon.getVision(self.passive_objects, self.active_objects) # TODO THIS MIGHT BE UNNECESSARY AND REMOVABLE.
             self.pigeon.current_geomag_loc = self.pigeon.updateCurrentGeomag(self.geomag_map)
 
             # Updates the performance metrics
@@ -254,7 +267,6 @@ class GymEnvironment(gym.Env):
 
     # Reward function to indicate good/bad solutions
     def reward_function(self, prev_loc):
-        # todo reward needs to be in a better range. Death = -10, Home = +10
         reward = 0
 
         # Sinuosity - how close to the euclidian distance to the value the movement is.
@@ -269,7 +281,7 @@ class GymEnvironment(gym.Env):
 
         reward += round(1/dist_from_euc_line, 3) # THIS HAS AN ERROR WHEN THE PIGEON MOVES BEHIND THE START POINT, IT HAS UNEVEN VALUES.
 
-        print("VALUE: ", round(1/dist_from_euc_line, 3))
+        # print("VALUE: ", round(1/dist_from_euc_line, 3))
         # print(dist_from_euc_line)
 
         euc_line = math.sqrt((pige_start[0]-loft_loc[0])**2 + (pige_start[1]-loft_loc[1])**2)
@@ -305,7 +317,7 @@ class GymEnvironment(gym.Env):
 
         # Try penalising number of moves
 
-        print(reward)
+        # print(reward)
 
         return reward
 
@@ -330,3 +342,39 @@ class GymEnvironment(gym.Env):
 
         with open("model_parameters/environment.pkl", "wb") as f:
             pickle.dump(save_all, f)
+
+    def load_env(self, passive_objects, active_objects, geo_mag, villages, towns, cities):
+        self.env_orig.passive_objects = passive_objects
+        self.env_orig.active_objects = active_objects
+        self.env_orig.geo_map = geo_mag
+        self.env_orig.villages = villages
+        self.env_orig.towns = towns
+        self.env_orig.cities = cities
+
+        self.passive_objects = passive_objects
+        self.active_objects = active_objects
+        self.geomag_map = self.env_orig.geo_map.Map
+
+        self.canvas.delete("all")
+
+        for item in self.passive_objects:
+            if item.getClass() == "City":
+                item.drawCity(self.canvas)
+            elif item.getClass() == "Town":
+                item.drawTown(self.canvas)
+            elif item.getClass() == "Village":
+                item.drawVillage(self.canvas)
+
+        for item in self.active_objects:
+            if item.getClass() == "Loft":
+                item.image = None
+                loft = [f for f in self.env_orig.active_objects if f.getClass() == "Loft"][0]
+                loft.image = None
+                item.drawLoft(self.canvas)
+            if item.getClass() == "Predator":
+                item.drawPredator(self.canvas)
+
+        self.env_orig.geo_map.drawGrid(self.canvas, X_SIZE, Y_SIZE)
+
+        self.first_run = True # To ensure the matrix redraws itself.
+        return self.reset()

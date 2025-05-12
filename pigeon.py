@@ -110,22 +110,23 @@ class Pigeon:
         self.x = new_x
         self.y = new_y
 
-        # TODO TESTING ALLOWING PIGEON TO EXIT THE AREA. SHOULD BE PUNISHED BY REWARD FUNCTION INSTEAD OF BOUNDARY
-        # # Handle boundary collisions
-        # if self.x >= 1000:
-        #     self.x = 999
-        # elif self.x <= 0:
-        #     self.x = 1
-        # if self.y >= 1000:
-        #     self.y = 999
-        # elif self.y <= 0:
-        #     self.y = 1
-
         self.no_moves += 1
 
         canvas.delete(self.name)
         canvas.delete("view_distance")
         self.drawPigeon(canvas)
+
+    # This is the movement for the pigeon but with no updating of the canvas
+    def move_no_draw(self):
+        new_x = self.x + self.xv
+        new_y = self.y + self.yv
+
+        self.dist_moved += math.sqrt((new_x-self.x)**2 + (new_y-self.y)**2)
+
+        self.x = new_x
+        self.y = new_y
+
+        self.no_moves += 1
 
     # Used to update all aspects of the pigeon, each turn, including movement.
     # Takes inputs of the relevant objects as well as the angle the pigeon is moving in and the number of milliseconds before each update (used to calculate velocity)

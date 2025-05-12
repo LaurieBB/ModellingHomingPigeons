@@ -32,7 +32,7 @@ class DQN:
         self.window = tk.Tk()
         self.window.resizable(False, False)
 
-        self.env = GymEnvironment(self.window)
+        self.env = GymEnvironment(True, self.window)
 
         # Used to ensure that clicking anywhere on the map will move the pigeon to that location.
         self.window.bind("<Button-1>", self.env.click_handler)
@@ -149,7 +149,7 @@ class DQN:
             optimizer.step()
 
         # Hyperparameter
-        num_episodes = 50
+        num_episodes = 3
 
         for i_episode in range(num_episodes):
             print(f'Episode {i_episode}')
@@ -189,12 +189,21 @@ class DQN:
                 if done:
                     break
 
+        # Save the state and action size for use in testing
+        with open("model_parameters/space_size.pkl", "wb") as f:
+            pickle.dump((state_size, action_size), f)
+
+        # Saving the weights and parameters for later use in testing
         torch.save({
             'target_net_state_dict': target_net.state_dict(),
             'policy_net_state_dict': policy_net.state_dict(),
             'optimizer_state_dict': optimizer.state_dict()
         }, "model_parameters/dqn_parameters.pt")
 
+        # Saving the entire model for use in GA
+        torch.save(policy_net, "model_parameters/dqn_model.pt")
+
+        # Save the environment for testing
         self.env.save_env()
 
         self.window.quit()

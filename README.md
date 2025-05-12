@@ -8,6 +8,11 @@ the website that was used to find the coordinates in longitude and latitude, tha
 accurately reflect a real area. Through this website you can load the .nmea file and see the positions marked, and even 
 change it if desired. 
 
+## Python Version
+Any from Python 3.10 - 3.12
+
+Just cannot use 3.13 as it is not compatible with pytorch. 
+
 ## Packages
 
 beautifulsoup4 - 4.13.4
@@ -17,6 +22,8 @@ pygad - 3.4.0
 gymnasium - 1.1.1
 
 lxml_html_clean - 0.4.2
+
+pytorch - FIND VERSION
 
 
 # DONT FORGET TO REINSTALL AND RESET THE VENV BEFORE SUBMISSION

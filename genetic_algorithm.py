@@ -1,140 +1,221 @@
 import datetime
 import math
+import pickle
 import time
 
 import pygad
 import tkinter as tk
 
+import torch
+
 from environment import Environment, in_area
+from gym_environment import GymEnvironment
+from reinforcement_learning import DeepQLearningNetwork
 from pigeon import Pigeon
 import threading
 import numpy as np
 from numpy.linalg import norm
 
+# Imports for PyTorch with PyGAD
+from pygad import torchga
+
 X_SIZE = 1000
 Y_SIZE = 1000
 UPDATE_SPEED = 50
 
+# Stores the necessary device for running tensors
+device = torch.device(
+    "cuda" if torch.cuda.is_available() else
+    "mps" if torch.backends.mps.is_available() else
+    "cpu"
+)
+
 # TODO REFERENCE: https://pygad.readthedocs.io/en/latest/ - Code not taken from here, just reference the documentation
 class GeneticAlgorithm:
     def __init__(self):
-        # Used in update to show a "real world" time passing in the canvas
-        self.real_time = datetime.datetime(2025, 1, 1, 0, 0, 0)
         self.window = tk.Tk()
         self.window.resizable(False, False)
 
-        # Initialise environment
-        self.env = Environment()
-        self.canvas, self.passive_objects, self.active_objects, self.geomag_map = self.env.initialise_environment(self.window,
-                                                                                                         X_SIZE, Y_SIZE)
+        # Take the environment variables
+        with open("model_parameters/environment.pkl", "rb") as f:
+            environment_objects = pickle.load(f)
+
+        passive_objects, active_objects, geo_mag, villages, towns, cities = environment_objects
+
+        # Set environment values.
+        self.env = GymEnvironment(draw=True, window=self.window)
+        self.observation =  self.env.load_env(passive_objects, active_objects, geo_mag, villages, towns, cities)
 
         self.window.bind("<Button-1>", self.click_handler)
 
-        self.pigeon = Pigeon("Pigeon1", X_SIZE, Y_SIZE, self.passive_objects, self.active_objects, self.geomag_map)
+        # This is used in the fitness function to edit a pigeon instance, and access the functions without having to change the real one.
+        self.temp_pigeon = Pigeon("temp", 1000, 1000, self.env.passive_objects, self.env.active_objects,
+                                 self.env.geomag_map)
 
-        self.pigeon_start_loc = [self.pigeon.x, self.pigeon.y]
-
-        loft = [f for f in self.active_objects if f.getClass() == "Loft"][0]
-        self.loft_location = [loft.x, loft.y]
 
     def solve(self):
         def fitness_func(ga_instance, solution, solution_idx):
-            reward = 0
-            # Sinuosity - how close to the euclidian distance to the value the movement is.
-            pige_start = np.asarray(self.pigeon_start_loc)
-            loft_loc = np.asarray(self.loft_location)
-            current_loc = np.asarray([self.pigeon.x, self.pigeon.y])
+            nonlocal model
+            model_weights_dict = torchga.model_weights_as_dict(model=model,
+                                                               weights_vector=solution)
 
-            dist_from_euc_line = np.abs(np.cross(loft_loc - pige_start, pige_start - current_loc)) / norm(
-                loft_loc - pige_start)
+            # Use the current solution as the model parameters.
+            model.load_state_dict(model_weights_dict)
 
-            reward -= dist_from_euc_line / 100
+            # Get the current observation (self.observation) - doesn't change when fitness function is used, only in callback
+            tens_observation = torch.tensor(self.observation, device=device, dtype=torch.float32).flatten().unsqueeze(0)
+            action_inp = torch.tensor([[model(tens_observation).max(1).indices.item()]], device=device).item()
 
-            # If moving towards home
-            if self.pigeon.dist_from_loft < prev_loc:
-                reward += 1
+            # This is a step function taken from gym, but applied to a brand new pigeon to test the outcome of a singular step and return a reward, without editing the environment.
+            def synthetic_step(action):
+                # Calculate pigeon speed
+                hypotenuse = 1000 * (0.0138888889 / 30)  # This ensures constant speed. 0.0138... is the real value of 50mph converted to mps and scaled with 30.
+                pigeon_xv = math.sin(math.radians(action)) * hypotenuse
+                pigeon_yv = math.cos(math.radians(action)) * hypotenuse
 
-            # If in predator area
-            for item in self.env.active_objects:
-                if item.getClass() == "Predator":
-                    if in_area(item.x, item.y, self.pigeon.x, self.pigeon.y, item.radius):
-                        reward -= 1
+                # previous location of the pigeon
+                prev_loc = self.env.pigeon.dist_from_loft
+                self.temp_pigeon.dist_from_loft = self.env.pigeon.dist_from_loft
 
-            # If against a wall
-            if self.pigeon.x < 1 or self.pigeon.y < 1 or self.pigeon.x > 999 or self.pigeon.y > 999:
-                reward -= 1
+                if self.env.pigeon.alive:
+                    # Move temp pigeon
+                    self.temp_pigeon.x = self.env.pigeon.x + pigeon_xv
+                    self.temp_pigeon.y = self.env.pigeon.y + pigeon_yv
 
-            # If pigeon can see the loft
-            if self.pigeon.dist_from_loft <= self.pigeon.viewing_distance:
-                reward += 1
+                # Checks that the pigeon is alive, and not in a predator area, this function also works out probability of death and
+                self.temp_pigeon.pigeonInDanger(self.env.active_objects)
 
-            print(reward)
+                # If alive, updates vision and geomagnetic location.
+                if self.env.pigeon.alive:
+                    # Updates the performance metrics
+                    loft = [x for x in self.env.active_objects if x.getClass() == "Loft"][0]  # This retrieves the loft instance (There should only be one)
+                    self.temp_pigeon.dist_from_loft = math.sqrt((self.temp_pigeon.x - loft.x) ** 2 + (self.temp_pigeon.y - loft.y) ** 2)
 
-            return reward
-            #TODO THIS CURRENTLY ISN'T LEARNING BECAUSE IT IS FINDING A SINGULAR OPTIMAL SOLUTIONS (ONLY ONE ANGLE)
-            # AND NOT REACTING TO DIFFERENT OBSTACLES, OR EVEN MOVING OUT OF ONE SQUARE. IT IS STUCK IN A LOCAL
-            # OPTIMA. COME BACK AND TRY AND WORK ON IT.
+                    # End if pigeon is in same location as loft, it may seem like a low value, however the pigeon is also
+                    if self.temp_pigeon.dist_from_loft <= 20:
+                        print("MY PIGEON IS HOME!!!")
+                        terminated = True
+                        truncated = False
+                    elif self.env.pigeon.no_moves >= 5000:
+                        terminated = False
+                        truncated = True
+                    # No issues.
+                    else:
+                        terminated = False
+                        truncated = False
+                else:
+                    terminated = False
+                    truncated = True
 
-            #todo Additionally, maybe the fact it is finding only one solution is not adequate for this, as it will just always
-            # move in one direction, regardless of obstacles. Maybe this is just a fitness function fix though????
+                reward_out = reward_function(prev_loc)
+
+                # Necessary if the pigeon goes too far out of bounds
+                if reward_out <= -10:
+                    truncated = True
+                    terminated = False
+
+                # Set reward for if it is finished, terminated=reached goal, truncated=died/too many moves
+                if terminated:
+                    reward_out = 10
+                if truncated:
+                    reward_out = -10
+
+                return reward_out
+
+            # todo change this if change reward function in gym_environment
+            def reward_function(prev_loc):
+                reward = 0
+
+                # Sinuosity - how close to the euclidian distance to the value the movement is.
+                pige_start = np.asarray(self.env.pigeon_start_loc)
+                loft_loc = np.asarray(self.env._target_location)
+                current_loc = np.asarray([self.temp_pigeon.x, self.temp_pigeon.y])
+
+                dist_from_euc_line = round(np.abs(np.cross(loft_loc - pige_start, pige_start - current_loc)) / norm(
+                    loft_loc - pige_start) / 10, 3)
+
+                if dist_from_euc_line <= 1:
+                    dist_from_euc_line = 1
+
+                reward += round(1 / dist_from_euc_line, 3)  # THIS HAS AN ERROR WHEN THE PIGEON MOVES BEHIND THE START POINT, IT HAS UNEVEN VALUES.
+
+                # print("VALUE: ", round(1/dist_from_euc_line, 3))
+                # print(dist_from_euc_line)
+
+                dist_from_loft = math.sqrt((current_loc[0] - loft_loc[0]) ** 2 + (current_loc[1] - loft_loc[1]) ** 2)
+
+                # If moving towards home
+                if dist_from_loft < prev_loc:
+                    reward += 1
+
+                # If in predator area
+                for item in self.env.env_orig.active_objects:
+                    if item.getClass() == "Predator":
+                        if in_area(item.x, item.y, self.temp_pigeon.x, self.temp_pigeon.y, item.radius):
+                            reward -= 1
+
+                # If against a wall
+                if self.temp_pigeon.x < 1 or self.temp_pigeon.y < 1 or self.temp_pigeon.x > 999 or self.temp_pigeon.y > 999:
+                    reward -= 3
+
+                # If pigeon can see the loft
+                if self.temp_pigeon.dist_from_loft <= self.temp_pigeon.viewing_distance:
+                    reward += 1
+
+                return reward
+
+            fitness = synthetic_step(action_inp)
+
+            return fitness
 
         # This is used to move the pigeon after each generation, according to the best angle of movement output by the code.
         def callback(ga_instance):
+            nonlocal model
             # This is used to get the current fitness of the best solution.
             solution, solution_fitness, solution_idx = ga_instance.best_solution()
 
-            print("     Best fitness: ", solution_fitness)
-            print("     Best solution: ", solution)
-            print("     Geomag val: ", (1/sum(self.pigeon.geomagDifference()))*10000)
+            model_weights_dict = torchga.model_weights_as_dict(model=model,
+                                                               weights_vector=solution)
 
-            # Angle is set to the best solution
-            angle = solution
+            # Use the current solution as the model parameters.
+            model.load_state_dict(model_weights_dict)
 
-            self.pigeon.update(self.canvas, self.passive_objects, self.active_objects, self.geomag_map, angle,
-                               UPDATE_SPEED)
+            tens_observation = torch.tensor(self.observation, device=device, dtype=torch.float32).flatten().unsqueeze(0)
+            action = torch.tensor([[model(tens_observation).max(1).indices.item()]], device=device)
 
-            # This updates the time in the top left, to show how much time is passing in the "real world" version of the model. This shows how fast these pigeons travel in reality
-            self.real_time += datetime.timedelta(seconds=1)
-            self.canvas.delete("time")
-            self.canvas.create_text(20, 40, anchor="nw", text=f"Real World Time: {self.real_time.time()}", tag="time")
+            self.observation, reward, terminated, truncated = self.env.step(action.item())
 
-            # Returns "stop" when either the pigeon dies, or if it finds the solution.
-            if self.pigeon.dist_from_loft <= 0 or not self.pigeon.alive:
-                return "stop"
+        model = torch.load("model_parameters/dqn_model.pt", weights_only=False)
 
-            # time.sleep(0.05)
+        torch_ga = torchga.TorchGA(model=model,
+                                   num_solutions=10)
 
         # Run the GA
-        ga_instance = pygad.GA(num_generations=10000,
-                               num_parents_mating=10,
+        ga_instance = pygad.GA(num_generations=200,
                                fitness_func=fitness_func,
-                               sol_per_pop=30,
-                               num_genes=1,
-                               gene_type=int,
-                               gene_space=range(0, 360),
-                               init_range_low=0,
-                               init_range_high=360,
-                               random_mutation_min_val=0,
-                               random_mutation_max_val=360,
-                               mutation_by_replacement=True,
-                               mutation_probability=0.1,
-                               mutation_percent_genes=100,
+                               num_parents_mating=3,
+                               sol_per_pop=10,
+                               initial_population=torch_ga.population_weights,
+                               parent_selection_type='tournament',
+                               crossover_type='single_point',
+                               mutation_type='random',
+                               keep_elitism=2, # MAYBE CHANGE BACK TO 1 IF NO DIFFERENCE
+                               K_tournament=3,
                                on_generation=callback)
 
-        # ga_instance.run()
-
-        self.pigeon.drawPigeon(self.canvas)
 
         t1 = threading.Thread(target=ga_instance.run)
         t1.start()
+
+        # TODO DON'T FORGET TO ADD CODE TO SAVE THE BEST OUTPUT
 
         self.window.mainloop()
 
     # This is added here so that at any point, you can click an area on the map and the pigeon will move there. Necessary for development.
     def click_handler(self, event):
             if event.num == 1:
-                self.pigeon.x = event.x
-                self.pigeon.y = event.y
+                self.env.pigeon.x = event.x
+                self.env.pigeon.y = event.y
 
 
 
