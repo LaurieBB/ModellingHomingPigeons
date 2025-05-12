@@ -29,6 +29,7 @@ class GymEnvironment(gym.Env):
             self.canvas, self.passive_objects, self.active_objects, self.geomag_map = self.env_orig.initialise_environment(window, X_SIZE, Y_SIZE)
             self.pigeon = Pigeon("Pigeon1", X_SIZE, Y_SIZE, self.passive_objects, self.active_objects, self.geomag_map)
             self.pigeon.drawPigeon(self.canvas)
+            self.window = window
             self.draw = True
         else:
             self.passive_objects, self.active_objects, self.geomag_map = self.env_orig.initialise_environment_no_draw(X_SIZE, Y_SIZE)
@@ -367,10 +368,7 @@ class GymEnvironment(gym.Env):
 
         for item in self.active_objects:
             if item.getClass() == "Loft":
-                item.image = None
-                loft = [f for f in self.env_orig.active_objects if f.getClass() == "Loft"][0]
-                loft.image = None
-                item.drawLoft(self.canvas)
+                item.drawLoft(self.canvas, self.window)
             if item.getClass() == "Predator":
                 item.drawPredator(self.canvas)
 

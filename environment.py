@@ -232,11 +232,14 @@ class Loft:
         self.y = (random.choice(list(range(0 + self.radius, 300)) + list(range(700, 1000 - self.radius)))) # This ensures the loft is only placed near the edge of the map
         self.image = None # This is required to ensure images aren't garbage collected by python
 
-    def drawLoft(self, canvas):
+    def drawLoft(self, canvas, window):
         # The window has to be included to prevent the image from being garbage collected at the end of the function
-        self.image = ImageTk.PhotoImage(Image.open("data/images/Loft.png").convert("RGBA").resize((40,30)))
+        with Image.open("data/images/Loft.png") as image_file:
+            window.image = ImageTk.PhotoImage(image_file.convert("RGBA").resize((40,30)))
 
-        canvas.create_image(self.x, self.y, image=self.image, anchor="center", tag=f"{self.name}")
+        image_file.close()
+
+        canvas.create_image(self.x, self.y, image=window.image, anchor="center", tag=f"{self.name}")
         canvas.tag_raise(f"{self.name}")
 
     @staticmethod
@@ -274,7 +277,7 @@ class Environment:
 
         # Add Loft (destination) - Required to be 1
         loft = Loft("Loft", xsize, ysize)
-        loft.drawLoft(canvas)
+        loft.drawLoft(canvas, window)
         self.active_objects.append(loft)
 
         # Add Cities

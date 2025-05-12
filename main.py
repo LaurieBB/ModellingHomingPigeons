@@ -8,7 +8,7 @@ from reinforcement_learning import DQN
 from genetic_algorithm import GeneticAlgorithm
 from pigeon import Pigeon
 from environment import Environment
-from testing import Test, run_tests
+from testing import run_tests
 
 X_SIZE = 1000
 Y_SIZE = 1000
@@ -52,8 +52,8 @@ def genetic_algorithm():
     genetic_algorithm.solve()
 
 # start = time.time()
-# DQN()
+DQN()
 # end = time.time()
 # print("time to run: ", end - start)
-genetic_algorithm()
+# genetic_algorithm()
 # run_tests()

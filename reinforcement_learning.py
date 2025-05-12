@@ -24,9 +24,6 @@ from gym_environment import GymEnvironment
 X_SIZE = 1000
 Y_SIZE = 1000
 
-#Todo This is running and learning but more possible ideas:
-# Could also try scaling values like the geomagnetic ones, might make it more interpretable.
-
 class DQN:
     def __init__(self):
         self.window = tk.Tk()
@@ -149,9 +146,14 @@ class DQN:
             optimizer.step()
 
         # Hyperparameter
-        num_episodes = 3
+        num_episodes = 3 # Todo have temporarily stopped counting episodes, now it is running until 3 solutions are found in a row
 
-        for i_episode in range(num_episodes):
+        # Count to track number of solutions found in a row
+        no_solutions = 0
+        no_solutions_to_end = 3
+
+        # TODO maybe change this so it is not just a number of episodes, but rather it runs until there are 3 consecutive runs where it reaches the goal
+        for i_episode in count():
             print(f'Episode {i_episode}')
             # Initialize the environment and get its state
             state = self.env.reset()
@@ -165,8 +167,10 @@ class DQN:
 
                 if terminated:
                     next_state = None
+                    no_solutions += 1
                 else:
                     next_state = torch.tensor(observation, device=device, dtype=torch.float32).flatten().unsqueeze(0)
+                    no_solutions = 0
 
                 # Store the transition in memory
                 memory.push(state, action, next_state, reward)
@@ -188,6 +192,10 @@ class DQN:
 
                 if done:
                     break
+
+            if no_solutions >= no_solutions_to_end:
+                break
+
 
         # Save the state and action size for use in testing
         with open("model_parameters/space_size.pkl", "wb") as f:
@@ -241,13 +249,14 @@ class ReplayMemory(object):
 #         return self.fc3(x)
 
 # The network layout used for training
+# TODO CHANGE THE LAYOUT AND RETRAIN
 class DeepQLearningNetwork(nn.Module):
     def __init__(self, state_size, action_size):
         super(DeepQLearningNetwork, self).__init__()
         self.sequential = nn.Sequential(
-            nn.Linear(state_size, 512),
+            nn.Linear(state_size, 1024),
             nn.ReLU(),
-            nn.Linear(512, 512),
+            nn.Linear(1024, 512),
             nn.ReLU(),
             nn.Linear(512, action_size),
         )

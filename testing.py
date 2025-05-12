@@ -13,8 +13,7 @@ from gym_environment import GymEnvironment
 from reinforcement_learning import DQN, DeepQLearningNetwork
 from genetic_algorithm import GeneticAlgorithm
 
-
-class Test:
+class TestDQNGeneralisability:
     def test_DQN_generalisability(self, no_runs=10):
         metrics = {
             'name': "DQN-Generalisability",
@@ -100,106 +99,100 @@ class Test:
 
     # TODO ADD SAME FUNCTIONS FOR GA.
 
-def test_DQN(no_runs=10):
-    metrics = {
-        'name': "DQN",
-        'no_moves': [],
-        'dist_moved': [],
-        'bool_reached_goal': [],
-        'bool_died': [],
-        'time_taken': []
-    }
+class TestDQN:
+    def test_DQN(self, no_runs=10):
+        def run():
+            for x in range(0, self.no_runs):
+                # Initialise the metrics
+                metrics['no_moves'].append(0)
+                metrics['dist_moved'].append(0)
 
-    # Get the state and action space size from a pickle
-    with open("model_parameters/space_size.pkl", "rb") as f:
-        state_size, action_size = pickle.load(f)
+                start = time.time()
+                terminated = False
+                truncated = False
+                self.env.reset()
+                while not terminated and not truncated:
+                    metrics['no_moves'][-1] += 1
+                    # This is the real distance, for a set velocity at any point. See pigeon class
+                    metrics['dist_moved'][-1] += 1000 * (0.0138888889/30)
+                    observation = torch.tensor(self.env.get_observations(), device=device, dtype=torch.float32).flatten().unsqueeze(0)
+                    action = torch.tensor([[policy_net(observation).max(1).indices.item()]], device=device)
+                    _, _, terminated, truncated = self.env.step(action.item())
 
-    # Initialise the networks
-    target_net = DeepQLearningNetwork(state_size, action_size)
-    policy_net = DeepQLearningNetwork(state_size, action_size)
-    optimizer = optim.AdamW(policy_net.parameters(), amsgrad=True) # LEARNING RATE WAS IN HERE, DOES IT NEED TO BE RE-ADDED?
+                end = time.time()
+                metrics['time_taken'].append(end-start)
 
-    # Load in the weights and parameters from the saved file
-    checkpoint = torch.load("model_parameters/dqn_parameters.pt", weights_only=True)
-    target_net.load_state_dict(checkpoint['target_net_state_dict'])
-    policy_net.load_state_dict(checkpoint['policy_net_state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+                # If still alive and reached loft
+                if terminated:
+                    metrics['bool_reached_goal'].append(True)
+                    metrics['bool_died'].append(False)
+                else:
+                    metrics['bool_reached_goal'].append(False)
+                    if not self.env.pigeon.alive:
+                        metrics['bool_died'].append(True)
+                    else:
+                        metrics['bool_died'].append(False)
 
-    # Set them to evaluation mode.
-    target_net.eval()
-    policy_net.eval()
+            self.env.close()
+            self.window.deiconify()
+            self.window.destroy()
 
-    # Take the environment variables
-    with open("model_parameters/environment.pkl", "rb") as f:
-        environment_objects = pickle.load(f)
+        self.window = tk.Toplevel()  # Have to use top level here as regular tk.Tk() Causes errors for some reason.
+        self.window.resizable(False, False)
 
-    passive_objects, active_objects, geo_mag, villages, towns, cities = environment_objects
+        # Take the environment variables
+        with open("model_parameters/environment.pkl", "rb") as f:
+            environment_objects = pickle.load(f)
 
-    # Initialise window
-    window = tk.Tk()
-    window.resizable(False, False)
+        passive_objects, active_objects, geo_mag, villages, towns, cities = environment_objects
 
-    # Set environment values.
-    env = GymEnvironment(draw=True, window=window)
-    env.load_env(passive_objects, active_objects, geo_mag, villages, towns, cities)
+        self.env = GymEnvironment(True, self.window)
+        self.env.load_env(passive_objects, active_objects, geo_mag, villages, towns, cities)
 
-    # Used to ensure that clicking anywhere on the map will move the pigeon to that location.
-    # window.bind("<Button-1>", self.env.env_orig.click_handler)
+        # Used to ensure that clicking anywhere on the map will move the pigeon to that location.
+        self.window.bind("<Button-1>", self.env.click_handler)
 
-    # Run the tests and store the metrics
-    def run():
-        nonlocal env, window
-        # Stores the necessary device for running tensors
+        self.no_runs = no_runs
+
+        metrics = {
+            'name': "DQN",
+            'no_moves': [],
+            'dist_moved': [],
+            'bool_reached_goal': [],
+            'bool_died': [],
+            'time_taken': []
+        }
+
+        # Set the device to run on GPU, if applicable
         device = torch.device(
-            "cuda" if torch.cuda.is_available() else
-            "mps" if torch.backends.mps.is_available() else
             "cpu"
         )
 
-        for x in range(0, no_runs):
-            print("Run ", x)
-            # Initialise the metrics
-            metrics['no_moves'].append(0)
-            metrics['dist_moved'].append(0)
+        # Get the state and action space size from a pickle
+        with open("model_parameters/space_size.pkl", "rb") as f:
+            state_size, action_size = pickle.load(f)
 
-            start = time.time()
-            terminated = False
-            truncated = False
-            env.reset()
-            while not terminated and not truncated:
-                metrics['no_moves'].append(1)
-                # This is the real distance, for a set velocity at any point. See pigeon class
-                metrics['dist_moved'].append(1000 * (0.0138888889/30))
-                observation = torch.tensor(env.get_observations(), device=device, dtype=torch.float32).flatten().unsqueeze(0)
-                action = torch.tensor([[policy_net(observation).max(1).indices.item()]], device=device)
-                _, _, terminated, truncated = env.step(action.item())
+        # Initialise the networks
+        # target_net = DeepQLearningNetwork(state_size, action_size)
+        policy_net = DeepQLearningNetwork(state_size, action_size)
+        # optimizer = optim.AdamW(policy_net.parameters(), amsgrad=True) # LEARNING RATE WAS IN HERE, DOES IT NEED TO BE RE-ADDED?
 
-            end = time.time()
-            metrics['time_taken'].append(end-start)
+        # Load in the weights and parameters from the saved file
+        checkpoint = torch.load("model_parameters/dqn_parameters.pt", weights_only=True)
+        # target_net.load_state_dict(checkpoint['target_net_state_dict'])
+        policy_net.load_state_dict(checkpoint['policy_net_state_dict'])
+        # optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
-            # If still alive and reached loft
-            if terminated:
-                metrics['bool_reached_goal'].append(True)
-                metrics['bool_died'].append(False)
-            else:
-                metrics['bool_reached_goal'].append(False)
-                if not env.pigeon.alive:
-                    metrics['bool_died'].append(True)
-                else:
-                    metrics['bool_died'].append(False)
+        # Set them to evaluation mode.
+        # target_net.eval()
+        policy_net.eval()
 
+        t1 = threading.Thread(target=run)
+        t1.start()
 
-        loft = [f for f in env.env_orig.active_objects if f.getClass() == "Loft"][0]
-        loft.image = None
+        self.window.mainloop()
 
-        window.quit() # TODO ERRORING HERE WHEN RUN MULTIPLE LOOPS, I DO NOT THINK THIS IS BEING CALLED CORRECTLY BUT IDK WHY. NEED TO FIX.
-
-    t1 = threading.Thread(target=run)
-    t1.start()
-
-    window.mainloop()
-
-    return metrics
+        return metrics
 
 # Plot all the graphs for a list full of the dictionaries of metrics values.
 def plot_graphs(metrics):
@@ -217,19 +210,24 @@ def plot_graphs(metrics):
     # Box plots to compare average number of moves
     # Code influenced by: https://matplotlib.org/stable/gallery/statistics/boxplot_demo.html
     box_colours = ["mistyrose", "lightyellow"]
-    fig, ax = plt.subplots(1, len(metrics))
-    ax.set(
-        axisbelow = True,
-        title='Number of Moves by Model Type',
-        xlabel='Model',
-        ylabel='Number of Moves',
-    )
+    fig, axes = plt.subplots(figsize=(10, 6))
 
     no_moves = []
     for met in metrics:
         no_moves.append(met['no_moves'])
 
-    all_plts = ax.boxplot(no_moves, notch=False, sym='+', orientation='vertical')
+    all_plts = axes.boxplot(no_moves, notch=False, sym='+', orientation='vertical')
+
+    # Add horzontal lines to the gride
+    axes.yaxis.grid(True, linestyle='-', which='major', color='lightgrey',
+                   alpha=0.5)
+
+    axes.set(
+        axisbelow = True,
+        title='Number of Moves by Model Type',
+        xlabel='Model',
+        ylabel='Number of Moves',
+    )
 
     for x in range(0, len(metrics)):
         box = all_plts['boxes'][x]
@@ -242,7 +240,7 @@ def plot_graphs(metrics):
         box_coords = np.column_stack([box_x, box_y])
 
         # Put colour in th plot
-        ax.add_patch(Polygon(box_coords, facecolor=box_colours[x % 2]))
+        axes.add_patch(Polygon(box_coords, facecolor=box_colours[x % 2]))
 
         # Re add the medians as the colour blocked it.
         med = all_plts['medians'][x]
@@ -251,13 +249,57 @@ def plot_graphs(metrics):
         for j in range(2):
             median_x.append(med.get_xdata()[j])
             median_y.append(med.get_ydata()[j])
-            ax.plot(median_x, median_y)
+            axes.plot(median_x, median_y)
+
+    model_names = [metrics[x]['name'] for x in range(0, len(metrics))]
+    axes.set_xticklabels(model_names)
 
 
     # Box plots for distance moved
-    fig, ax = plt.subplots(1, len(metrics))
+    box_colours = ["blue", "yellow"]
+    fig, axes = plt.subplots(figsize=(10, 6))
+
+    dist_moved = []
+    for met in metrics:
+        dist_moved.append(met['dist_moved'])
+
+    all_plts = axes.boxplot(dist_moved, notch=False, sym='+', orientation='vertical')
+
+    # Add horzontal lines to the gride
+    axes.yaxis.grid(True, linestyle='-', which='major', color='lightgrey',
+                    alpha=0.5)
+
+    axes.set(
+        axisbelow=True,
+        title='Distance Moved by Model Type',
+        xlabel='Model',
+        ylabel='Distance Moved',
+    )
+
     for x in range(0, len(metrics)):
-        ax.boxplot(metrics[x]['dist_moved'])
+        box = all_plts['boxes'][x]
+
+        box_x = []
+        box_y = []
+        for j in range(5):
+            box_x.append(box.get_xdata()[j])
+            box_y.append(box.get_ydata()[j])
+        box_coords = np.column_stack([box_x, box_y])
+
+        # Put colour in th plot
+        axes.add_patch(Polygon(box_coords, facecolor=box_colours[x % 2]))
+
+        # Re add the medians as the colour blocked it.
+        med = all_plts['medians'][x]
+        median_x = []
+        median_y = []
+        for j in range(2):
+            median_x.append(med.get_xdata()[j])
+            median_y.append(med.get_ydata()[j])
+            axes.plot(median_x, median_y)
+
+    model_names = [metrics[x]['name'] for x in range(0, len(metrics))]
+    axes.set_xticklabels(model_names)
 
 
     # Horizontal bar charts to show number of dead pigeons and number that reached goal
@@ -265,7 +307,10 @@ def plot_graphs(metrics):
     width = 0.25  # the width of the bars
     multiplier = 0
 
-    fig, ax = plt.subplots(layout='constrained')
+    fig, ax = plt.subplots(layout='constrained', figsize=(10, 6))
+
+    ax.set(axisbelow=True,
+           title='No Pigeons Reached Goal and No. Pigeons Caught by Predator by Model Type',)
 
     for z in range(0, len(metrics)):
         no_reached_goal = 0
@@ -284,10 +329,14 @@ def plot_graphs(metrics):
         multiplier += 1
 
     # Add some text for labels, title and custom x-axis tick labels, etc.
-    ax.set_ylabel('No. Pigeons ')
-    ax.set_title('Model Type')
+    ax.set_xlabel('No. Pigeons ')
+    ax.set_ylabel('Model Type')
     model_names = [metrics[x]['name'] for x in range(0, len(metrics))]
-    ax.set_xticks(x + width, model_names)
+    ax.set_yticks(x + 0.5*width, model_names)
+
+    # Add vertical lines to the grid
+    ax.xaxis.grid(True, linestyle='-', which='major', color='lightgrey',
+                    alpha=0.5)
 
 
     # Significance tests, for continuous variables (no_moves, dist_moved) to see if there is a significant difference.
@@ -296,14 +345,19 @@ def plot_graphs(metrics):
 
 
 def run_tests():
-    # metrics = []
-    # metrics.append(test_DQN(1))
-    #
-    # with open("pickle_test.pkl", "wb") as f:
-    #     pickle.dump(metrics, f)
+    metrics = []
+    test = TestDQN()
+    metrics.append(test.test_DQN(1))
+    metrics.append(test.test_DQN(1))
+    # metrics.append(TestDQN(1))
+    # TestDQN(1)
+    # TestDQN(1)
 
-    with open("pickle_test.pkl", "rb") as f: # TODO REMEMBER TO DELETE THIS.
-        metrics = pickle.load(f)
+    with open("test.pkl", "wb") as f:
+        pickle.dump(metrics, f)
+
+    # with open("test.pkl", "rb") as f:
+    #     metrics = pickle.load(f)
 
     plot_graphs(metrics)
 
