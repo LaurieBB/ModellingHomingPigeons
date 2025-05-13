@@ -518,7 +518,7 @@ def plot_graphs(metrics):
 
 
     # Box plots for distance moved
-    box_colours = ["blue", "yellow"]
+    box_colours = ["mistyrose", "lightyellow"]
     fig, axes = plt.subplots(figsize=(10, 6))
 
     dist_moved = []
@@ -572,38 +572,69 @@ def plot_graphs(metrics):
     fig, ax = plt.subplots(layout='constrained', figsize=(10, 6))
 
     ax.set(axisbelow=True,
-           title='No Pigeons Reached Goal and No. Pigeons Caught by Predator by Model Type',)
+           title='No Pigeons Reached Goal, No. Pigeons Caught by Predator and No. Pigeons Lost by Model Type',)
 
-    for z in range(0, len(metrics)):
-        no_reached_goal = 0
-        no_died = 0
-        no_lost = 0
-        for y in range(0, len(metrics[z]['bool_reached_goal'])):
-            if metrics[z]['bool_reached_goal'][y]:
-                no_reached_goal += 1
-            if metrics[z]['bool_died'][y]:
-                no_died += 1
-            if metrics[z]['bool_landed'][y]:
-                no_lost += 1
 
+    metrics_vals = {}
+
+    # Model 1
+    no_reached_goal = 0
+    no_died = 0
+    no_lost = 0
+    for boolean in metrics[0]['bool_reached_goal']:
+        if boolean:
+            no_reached_goal += 1
+    for boolean in metrics[0]['bool_died']:
+        if boolean:
+            no_died += 1
+    for boolean in metrics[0]['bool_landed']:
+        if boolean:
+            no_lost += 1
+
+    metrics_vals['No. Reached Goal'] = [no_reached_goal]
+    metrics_vals['No Caught by Predator'] = [no_died]
+    metrics_vals['No. Lost'] = [no_lost]
+
+    # Model 2
+    no_reached_goal = 0
+    no_died = 0
+    no_lost = 0
+    for boolean in metrics[1]['bool_reached_goal']:
+        if boolean:
+            no_reached_goal += 1
+    for boolean in metrics[1]['bool_died']:
+        if boolean:
+            no_died += 1
+    for boolean in metrics[1]['bool_landed']:
+        if boolean:
+            no_lost += 1
+
+        print(1)
+        print(no_reached_goal)
+        print(no_died)
+        print(no_lost)
+
+        print(metrics[1])
+
+    metrics_vals['No. Reached Goal'].append(no_reached_goal)
+    metrics_vals['No Caught by Predator'].append(no_died)
+    metrics_vals['No. Lost'].append(no_lost)
+
+    for attribute, measurement in metrics_vals.items():
         offset = width * multiplier
-        rects = ax.barh(x + offset, no_reached_goal, width, label="No. Reached Loft")
-        rects1 = ax.barh(x + offset, no_died, width, label="No. Eaten by Predator")
-        rects2 = ax.barh(x + offset, no_died, width, label="No. Who got Lost")
+        rects = ax.bar(x + offset, measurement, width, label=attribute)
         ax.bar_label(rects, padding=3)
-        ax.bar_label(rects1, padding=3)
-        ax.bar_label(rects2, padding=3)
         multiplier += 1
 
-
     # Add some text for labels, title and custom x-axis tick labels, etc.
-    ax.set_xlabel('No. Pigeons ')
-    ax.set_ylabel('Model Type')
+    ax.set_ylabel('No. Pigeons ')
+    ax.set_xlabel('Model Type')
+    ax.legend(loc='upper right', ncols=3)
     model_names = [metrics[x]['name'] for x in range(0, len(metrics))]
-    ax.set_yticks(x + 0.5*width, model_names)
+    ax.set_xticks(x + 0.5*width, model_names)
 
     # Add vertical lines to the grid
-    ax.xaxis.grid(True, linestyle='-', which='major', color='lightgrey',
+    ax.yaxis.grid(True, linestyle='-', which='major', color='lightgrey',
                     alpha=0.5)
 
 
@@ -621,27 +652,10 @@ def t_tests(metrics):
     #     'time_taken': []
     # }
 
-    # Find the real values (not bool) of the number that reached the goal and died
-    for x in range(0, len(metrics)):
-        no_reached_goal = 0
-        no_died = 0
-        no_landed = 0
-        for y in range(0, len(metrics[x]['bool_reached_goal'])):
-            if metrics[x]['bool_reached_goal'][y]:
-                no_reached_goal += 1
-            if metrics[x]['bool_died'][y]:
-                no_died += 1
-            if metrics[x]['bool_landed'][y]:
-                no_landed += 1
-
-        metrics[x]['bool_reached_goal'] = no_reached_goal
-        metrics[x]['bool_died'] = no_died
-        metrics[x]['bool_landed'] = no_landed
-
     t_test = {}
 
     for key in metrics[0].keys():
-        if key != 'name' and key != 'time_taken':
+        if key not in ['name', 'bool_died', 'bool_landed', 'bool_reached_goal']:
             result = ttest_ind(metrics[0][key], metrics[1][key]).pvalue
             t_test[key] = result
 
@@ -665,7 +679,9 @@ def run_tests(new_run=False, generalisability=False):
     with open("metric_runs/metrics.pkl", "rb") as f:
         while 1:
             try:
-                metrics.append(pickle.load(f))
+                loaded = pickle.load(f)
+                metrics.append(loaded)
+                print(loaded)
             except EOFError:
                 break
 
