@@ -32,7 +32,7 @@ device = torch.device(
     "cpu"
 )
 
-# TODO REFERENCE: https://pygad.readthedocs.io/en/latest/ - Code not taken from here, just reference the documentation
+# REFERENCE: https://pygad.readthedocs.io/en/latest/ - Code not taken from here, just reference the documentation
 class GeneticAlgorithm:
     def __init__(self, draw=False):
         self.batch_size = 150

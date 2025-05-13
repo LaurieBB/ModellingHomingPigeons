@@ -46,8 +46,7 @@ class DQN:
             self.solve()
 
 
-    # Code taken from: https://docs.pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
-    # TODO REFERENCE
+    # Code inspired from: https://docs.pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
     def solve(self):
         # Hyperparameters using in DQN:
         BATCH_SIZE = 512 # BATCH_SIZE is the number of transitions sampled from the replay buffer

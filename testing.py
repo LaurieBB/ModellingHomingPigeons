@@ -565,6 +565,7 @@ def plot_graphs(metrics):
 
 
     # Horizontal bar charts to show number of dead pigeons and number that reached goal
+    # Code taken from: https://matplotlib.org/stable/gallery/lines_bars_and_markers/barchart.html
     x = np.arange(len(metrics))  # the label locations
     width = 0.25  # the width of the bars
     multiplier = 0
