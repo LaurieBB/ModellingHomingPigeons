@@ -135,11 +135,6 @@ class GymEnvironment(gym.Env):
         observations = self.get_observations()
         reward = self.reward_function(prev_loc)
 
-        # Necessary if the pigeon goes too far out of bounds
-        if reward <= -10:
-            truncated = True
-            terminated = False
-
         # Set reward for if it is finished, terminated=reached goal, truncated=died/too many moves
         if terminated:
             reward = 10

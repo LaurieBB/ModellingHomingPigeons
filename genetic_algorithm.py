@@ -127,11 +127,6 @@ class GeneticAlgorithm:
 
                 reward_out = reward_function(prev_loc)
 
-                # Necessary if the pigeon goes too far out of bounds
-                if reward_out <= -10:
-                    truncated = True
-                    terminated = False
-
                 # Set reward for if it is finished, terminated=reached goal, truncated=died/too many moves
                 if terminated:
                     reward_out = 10
@@ -202,6 +197,9 @@ class GeneticAlgorithm:
             action = torch.tensor([[model(tens_observation).max(1).indices.item()]], device=device)
 
             self.observation, reward, terminated, truncated = self.env.step(action.item())
+
+            if terminated or truncated:
+                self.observation = self.env.reset()
 
             no_iterations += 1
 
