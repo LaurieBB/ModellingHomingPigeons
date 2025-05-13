@@ -681,7 +681,6 @@ def run_tests(new_run=False, generalisability=False):
             try:
                 loaded = pickle.load(f)
                 metrics.append(loaded)
-                print(loaded)
             except EOFError:
                 break
 
