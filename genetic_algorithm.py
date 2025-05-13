@@ -32,9 +32,11 @@ device = torch.device(
 
 # TODO REFERENCE: https://pygad.readthedocs.io/en/latest/ - Code not taken from here, just reference the documentation
 class GeneticAlgorithm:
-    def __init__(self):
-        self.window = tk.Tk()
-        self.window.resizable(False, False)
+    def __init__(self, draw=False):
+        self.draw = draw
+        if draw:
+            self.window = tk.Tk()
+            self.window.resizable(False, False)
 
         # Take the environment variables
         with open("model_parameters/environment.pkl", "rb") as f:
@@ -43,10 +45,11 @@ class GeneticAlgorithm:
         passive_objects, active_objects, geo_mag, villages, towns, cities = environment_objects
 
         # Set environment values.
-        self.env = GymEnvironment(draw=True, window=self.window)
-        self.observation =  self.env.load_env(passive_objects, active_objects, geo_mag, villages, towns, cities)
+        if draw:
+            self.env = GymEnvironment(draw=True, window=self.window)
+            self.window.bind("<Button-1>", self.click_handler)
 
-        self.window.bind("<Button-1>", self.click_handler)
+        self.observation =  self.env.load_env(passive_objects, active_objects, geo_mag, villages, towns, cities)
 
         # This is used in the fitness function to edit a pigeon instance, and access the functions without having to change the real one.
         self.temp_pigeon = Pigeon("temp", 1000, 1000, self.env.passive_objects, self.env.active_objects,
@@ -54,6 +57,21 @@ class GeneticAlgorithm:
 
 
     def solve(self):
+        # function to save current state of the model
+        def save_checkpoint():
+            nonlocal model
+
+            # Saving the weights and parameters for later use in testing
+            torch.save({
+                "ga_model_state_dict": model.state_dict(),
+            }, "model_parameters/ga_parameters.pt")
+
+            # Saving the entire model for use in GA
+            torch.save(model, "model_parameters/ga_model.pt")
+
+            # Save the environment for testing
+            self.env.save_env()
+
         def fitness_func(ga_instance, solution, solution_idx):
             nonlocal model
             model_weights_dict = torchga.model_weights_as_dict(model=model,
@@ -170,7 +188,7 @@ class GeneticAlgorithm:
 
         # This is used to move the pigeon after each generation, according to the best angle of movement output by the code.
         def callback(ga_instance):
-            nonlocal model
+            nonlocal model, no_iterations
             # This is used to get the current fitness of the best solution.
             solution, solution_fitness, solution_idx = ga_instance.best_solution()
 
@@ -184,6 +202,11 @@ class GeneticAlgorithm:
             action = torch.tensor([[model(tens_observation).max(1).indices.item()]], device=device)
 
             self.observation, reward, terminated, truncated = self.env.step(action.item())
+
+            no_iterations += 1
+
+            if no_iterations % 5 == 0:
+                save_checkpoint()
 
         model = torch.load("model_parameters/dqn_model.pt", weights_only=False)
 
@@ -203,13 +226,16 @@ class GeneticAlgorithm:
                                K_tournament=3,
                                on_generation=callback)
 
+        no_iterations = 0
 
-        t1 = threading.Thread(target=ga_instance.run)
-        t1.start()
+        if self.draw:
+            t1 = threading.Thread(target=ga_instance.run)
+            t1.start()
 
-        # TODO DON'T FORGET TO ADD CODE TO SAVE THE BEST OUTPUT
+            self.window.mainloop()
 
-        self.window.mainloop()
+        else:
+            ga_instance.run()
 
     # This is added here so that at any point, you can click an area on the map and the pigeon will move there. Necessary for development.
     def click_handler(self, event):
