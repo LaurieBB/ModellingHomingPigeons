@@ -25,19 +25,25 @@ X_SIZE = 1000
 Y_SIZE = 1000
 
 class DQN:
-    def __init__(self):
-        self.window = tk.Tk()
-        self.window.resizable(False, False)
+    def __init__(self, draw):
+        self.draw = draw
+        if draw:
+            self.window = tk.Tk()
+            self.window.resizable(False, False)
 
-        self.env = GymEnvironment(True, self.window)
+            self.env = GymEnvironment(True, self.window)
 
-        # Used to ensure that clicking anywhere on the map will move the pigeon to that location.
-        self.window.bind("<Button-1>", self.env.click_handler)
+            # Used to ensure that clicking anywhere on the map will move the pigeon to that location.
+            self.window.bind("<Button-1>", self.env.click_handler)
 
-        t1 = threading.Thread(target=self.solve)
-        t1.start()
+            t1 = threading.Thread(target=self.solve)
+            t1.start()
 
-        self.window.mainloop()
+            self.window.mainloop()
+        else:
+            self.env = GymEnvironment(False)
+
+            self.solve()
 
 
     # Code taken from: https://docs.pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
@@ -74,6 +80,26 @@ class DQN:
 
         optimizer = optim.AdamW(policy_net.parameters(), lr=LR, amsgrad=True)
         memory = ReplayMemory(10000)
+
+        # function to save current state of the model
+        def save_checkpoint():
+            nonlocal target_net, policy_net, optimizer, state_size, action_size
+            # Save the state and action size for use in testing
+            with open("model_parameters/space_size.pkl", "wb") as f:
+                pickle.dump((state_size, action_size), f)
+
+            # Saving the weights and parameters for later use in testing
+            torch.save({
+                'target_net_state_dict': target_net.state_dict(),
+                'policy_net_state_dict': policy_net.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict()
+            }, "model_parameters/dqn_parameters.pt")
+
+            # Saving the entire model for use in GA
+            torch.save(policy_net, "model_parameters/dqn_model.pt")
+
+            # Save the environment for testing
+            self.env.save_env()
 
         def select_action(inp_state):
             nonlocal iterations, policy_net, device
@@ -150,9 +176,8 @@ class DQN:
 
         # Count to track number of solutions found in a row
         no_solutions = 0
-        no_solutions_to_end = 3
+        no_solutions_to_end = 2
 
-        # TODO maybe change this so it is not just a number of episodes, but rather it runs until there are 3 consecutive runs where it reaches the goal
         for i_episode in count():
             print(f'Episode {i_episode}')
             # Initialize the environment and get its state
@@ -196,25 +221,13 @@ class DQN:
             if no_solutions >= no_solutions_to_end:
                 break
 
+            if i_episode % 5 == 0:
+                save_checkpoint()
 
-        # Save the state and action size for use in testing
-        with open("model_parameters/space_size.pkl", "wb") as f:
-            pickle.dump((state_size, action_size), f)
+        save_checkpoint()
 
-        # Saving the weights and parameters for later use in testing
-        torch.save({
-            'target_net_state_dict': target_net.state_dict(),
-            'policy_net_state_dict': policy_net.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict()
-        }, "model_parameters/dqn_parameters.pt")
-
-        # Saving the entire model for use in GA
-        torch.save(policy_net, "model_parameters/dqn_model.pt")
-
-        # Save the environment for testing
-        self.env.save_env()
-
-        self.window.quit()
+        if self.draw:
+            self.window.quit()
 
 
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
@@ -234,29 +247,15 @@ class ReplayMemory(object):
     def __len__(self):
         return len(self.memory)
 
-
-# # The network layout used for training
-# class DeepQLearningNetwork(nn.Module):
-#     def __init__(self, state_size, action_size):
-#         super(DeepQLearningNetwork, self).__init__()
-#         self.fc1 = nn.Linear(state_size, 256)
-#         self.fc2 = nn.Linear(256, 256)
-#         self.fc3 = nn.Linear(256, action_size)
-#
-#     def forward(self, x):
-#         x = F.relu(self.fc1(x))
-#         x = F.relu(self.fc2(x))
-#         return self.fc3(x)
-
 # The network layout used for training
 # TODO CHANGE THE LAYOUT AND RETRAIN
 class DeepQLearningNetwork(nn.Module):
     def __init__(self, state_size, action_size):
         super(DeepQLearningNetwork, self).__init__()
         self.sequential = nn.Sequential(
-            nn.Linear(state_size, 1024),
+            nn.Linear(state_size, 512),
             nn.ReLU(),
-            nn.Linear(1024, 512),
+            nn.Linear(512, 512),
             nn.ReLU(),
             nn.Linear(512, action_size),
         )

@@ -2,7 +2,9 @@ import math
 import random
 import sys
 
+import _tkinter
 from PIL import ImageTk, Image
+import tkinter as tk
 
 class Pigeon:
     # This is the distance the pigeon can see in any direction around itself.
@@ -86,18 +88,27 @@ class Pigeon:
             canvas.create_oval(self.x - self.viewing_distance, self.y - self.viewing_distance, self.x + self.viewing_distance,
                                self.y + self.viewing_distance, fill='', outline="black", width=1, tag="view_distance")
 
-            # It's necessary to load the image outside of tkinter first, to resize and rotate it appropriately
-            if not self.saved_image:
-                self.saved_image = Image.open("data/images/Pigeon.png").convert("RGBA").resize((30,30))
-            angle = math.degrees(math.atan(self.xv/(self.yv + sys.float_info.epsilon)))
-            if self.yv >= 0:
-                angle += 180
-            rotated_image = self.saved_image.rotate(angle) # Used to get the appropriate angle to rotate the image by.
-            # The self.image has to be included to prevent the image from being garbage collected at the end of the function
-            self.image = ImageTk.PhotoImage(rotated_image)
 
-            canvas.create_image(self.x, self.y, image=self.image, anchor="center", tag=f"{self.name}")
-            canvas.tag_raise(f"{self.name}")
+            # Try except has to be included due to an error with multiple runs of Testing, spent too long trying to fix the cause (5+ hours), so this is easier
+            try:
+                # It's necessary to load the image outside of tkinter first, to resize and rotate it appropriately
+                if not self.saved_image:
+                    self.saved_image = Image.open("data/images/Pigeon.png").convert("RGBA").resize((30, 30))
+                angle = math.degrees(math.atan(self.xv / (self.yv + sys.float_info.epsilon)))
+                if self.yv >= 0:
+                    angle += 180
+                rotated_image = self.saved_image.rotate(
+                    angle)  # Used to get the appropriate angle to rotate the image by.
+                # The self.image has to be included to prevent the image from being garbage collected at the end of the function
+                self.image = ImageTk.PhotoImage(rotated_image)
+
+                canvas.create_image(self.x, self.y, image=self.image, anchor="center", tag=f"{self.name}")
+                canvas.tag_raise(f"{self.name}")
+            except (tk.TclError, _tkinter.TclError, RuntimeError):
+                canvas.create_oval(self.x - 15, self.y - 15,
+                                   self.x + 15, self.y + 15, fill="grey", tag=f"{self.name}")
+                canvas.tag_raise(f"{self.name}")
+
             canvas.tag_raise("view_distance")
 
     # This is the movement per second, currently

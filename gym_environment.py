@@ -316,8 +316,6 @@ class GymEnvironment(gym.Env):
         # scale_dist_from_loft = np.log(self.pigeon.dist_from_loft/100)
         # reward -= scale_dist_from_loft
 
-        # Try penalising number of moves
-
         # print(reward)
 
         return reward
@@ -356,23 +354,24 @@ class GymEnvironment(gym.Env):
         self.active_objects = active_objects
         self.geomag_map = self.env_orig.geo_map.Map
 
-        self.canvas.delete("all")
+        if self.draw:
+            self.canvas.delete("all")
 
-        for item in self.passive_objects:
-            if item.getClass() == "City":
-                item.drawCity(self.canvas)
-            elif item.getClass() == "Town":
-                item.drawTown(self.canvas)
-            elif item.getClass() == "Village":
-                item.drawVillage(self.canvas)
+            for item in self.passive_objects:
+                if item.getClass() == "City":
+                    item.drawCity(self.canvas)
+                elif item.getClass() == "Town":
+                    item.drawTown(self.canvas)
+                elif item.getClass() == "Village":
+                    item.drawVillage(self.canvas)
 
-        for item in self.active_objects:
-            if item.getClass() == "Loft":
-                item.drawLoft(self.canvas, self.window)
-            if item.getClass() == "Predator":
-                item.drawPredator(self.canvas)
+            for item in self.active_objects:
+                if item.getClass() == "Loft":
+                    item.drawLoft(self.canvas, self.window)
+                if item.getClass() == "Predator":
+                    item.drawPredator(self.canvas)
 
-        self.env_orig.geo_map.drawGrid(self.canvas, X_SIZE, Y_SIZE)
+            self.env_orig.geo_map.drawGrid(self.canvas, X_SIZE, Y_SIZE)
 
         self.first_run = True # To ensure the matrix redraws itself.
         return self.reset()

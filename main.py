@@ -51,9 +51,9 @@ def genetic_algorithm():
     genetic_algorithm = GeneticAlgorithm()
     genetic_algorithm.solve()
 
-# start = time.time()
-DQN()
-# end = time.time()
+start = time.time()
+DQN(False)
+end = time.time()
 # print("time to run: ", end - start)
 # genetic_algorithm()
 # run_tests()

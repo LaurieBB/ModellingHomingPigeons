@@ -1,6 +1,8 @@
 import math
 import tkinter as tk
 import random
+
+import _tkinter
 from PIL import Image, ImageTk
 import numpy as np
 
@@ -206,15 +208,22 @@ class Predator:
                     overlap_flag = False
 
     def drawPredator(self, canvas):
+        # Try except has to be included due to an error with multiple runs of Testing, spent too long trying to fix the cause (5+ hours), so this is easier
+        try:
+            self.image = ImageTk.PhotoImage(Image.open("data/images/Tree.png").convert("RGBA").resize((40, 40)))
+
+            canvas.create_image(self.x, self.y, image=self.image, anchor="center", tag="treeImg")
+            canvas.tag_lower("treeImg")
+
+        except (tk.TclError, _tkinter.TclError):
+            canvas.create_oval(self.x - 10, self.y - 10,
+                               self.x + 10, self.y + 10, fill="green",tag=f"treeImg")
+            canvas.tag_raise(f"treeImg")
+
         # These circles indicate increasing danger areas for the pigeon.
         canvas.create_oval(self.x - self.radius, self.y - self.radius,
                            self.x + self.radius, self.y + self.radius, fill="#FF9238", tag="predator_area")
         canvas.create_text(self.x, self.y + self.radius, anchor="s", text=f"{self.chance_of_death*100}%")
-
-        self.image = ImageTk.PhotoImage(Image.open("data/images/Tree.png").convert("RGBA").resize((40, 40)))
-
-        canvas.create_image(self.x, self.y, image=self.image, anchor="center", tag="treeImg")
-        canvas.tag_lower("treeImg")
         canvas.tag_lower("predator_area")
 
 
@@ -233,14 +242,20 @@ class Loft:
         self.image = None # This is required to ensure images aren't garbage collected by python
 
     def drawLoft(self, canvas, window):
-        # The window has to be included to prevent the image from being garbage collected at the end of the function
-        with Image.open("data/images/Loft.png") as image_file:
-            window.image = ImageTk.PhotoImage(image_file.convert("RGBA").resize((40,30)))
+        # Try except has to be included due to an error with multiple runs of Testing, spent too long trying to fix the cause (5+ hours), so this is easier
+        try:
+            # The window has to be included to prevent the image from being garbage collected at the end of the function
+            with Image.open("data/images/Loft.png") as image_file:
+                window.image = ImageTk.PhotoImage(image_file.convert("RGBA").resize((40,30)))
 
-        image_file.close()
+            image_file.close()
 
-        canvas.create_image(self.x, self.y, image=window.image, anchor="center", tag=f"{self.name}")
-        canvas.tag_raise(f"{self.name}")
+            canvas.create_image(self.x, self.y, image=window.image, anchor="center", tag=f"{self.name}")
+            canvas.tag_raise(f"{self.name}")
+        except (tk.TclError, _tkinter.TclError):
+            canvas.create_oval(self.x - self.radius, self.y - self.radius,
+                               self.x + self.radius, self.y + self.radius, fill="yellow",tag=f"{self.name}")
+            canvas.tag_raise(f"{self.name}")
 
     @staticmethod
     def getClass():

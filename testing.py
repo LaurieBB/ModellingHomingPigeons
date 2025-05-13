@@ -99,46 +99,14 @@ class TestDQNGeneralisability:
 
     # TODO ADD SAME FUNCTIONS FOR GA.
 
-class TestDQN:
-    def test_DQN(self, no_runs=10):
-        def run():
-            for x in range(0, self.no_runs):
-                # Initialise the metrics
-                metrics['no_moves'].append(0)
-                metrics['dist_moved'].append(0)
+class test_DQN:
+    def __init__(self, no_runs=10, draw=False):
+        self.no_runs = no_runs
+        self.draw = draw
 
-                start = time.time()
-                terminated = False
-                truncated = False
-                self.env.reset()
-                while not terminated and not truncated:
-                    metrics['no_moves'][-1] += 1
-                    # This is the real distance, for a set velocity at any point. See pigeon class
-                    metrics['dist_moved'][-1] += 1000 * (0.0138888889/30)
-                    observation = torch.tensor(self.env.get_observations(), device=device, dtype=torch.float32).flatten().unsqueeze(0)
-                    action = torch.tensor([[policy_net(observation).max(1).indices.item()]], device=device)
-                    _, _, terminated, truncated = self.env.step(action.item())
-
-                end = time.time()
-                metrics['time_taken'].append(end-start)
-
-                # If still alive and reached loft
-                if terminated:
-                    metrics['bool_reached_goal'].append(True)
-                    metrics['bool_died'].append(False)
-                else:
-                    metrics['bool_reached_goal'].append(False)
-                    if not self.env.pigeon.alive:
-                        metrics['bool_died'].append(True)
-                    else:
-                        metrics['bool_died'].append(False)
-
-            self.env.close()
-            self.window.deiconify()
-            self.window.destroy()
-
-        self.window = tk.Toplevel()  # Have to use top level here as regular tk.Tk() Causes errors for some reason.
-        self.window.resizable(False, False)
+        if self.draw:
+            self.window = tk.Tk()
+            self.window.resizable(False, False)
 
         # Take the environment variables
         with open("model_parameters/environment.pkl", "rb") as f:
@@ -146,25 +114,27 @@ class TestDQN:
 
         passive_objects, active_objects, geo_mag, villages, towns, cities = environment_objects
 
-        self.env = GymEnvironment(True, self.window)
+        if self.draw:
+            self.env = GymEnvironment(draw=True, window=self.window)
+
+            # Used to ensure that clicking anywhere on the map will move the pigeon to that location.
+            self.window.bind("<Button-1>", self.env.click_handler)
+        else:
+            self.env = GymEnvironment(draw=False)
         self.env.load_env(passive_objects, active_objects, geo_mag, villages, towns, cities)
 
-        # Used to ensure that clicking anywhere on the map will move the pigeon to that location.
-        self.window.bind("<Button-1>", self.env.click_handler)
-
-        self.no_runs = no_runs
-
-        metrics = {
+        self.metrics = {
             'name': "DQN",
             'no_moves': [],
             'dist_moved': [],
             'bool_reached_goal': [],
+            'bool_landed': [],
             'bool_died': [],
             'time_taken': []
         }
 
         # Set the device to run on GPU, if applicable
-        device = torch.device(
+        self.device = torch.device(
             "cpu"
         )
 
@@ -174,25 +144,73 @@ class TestDQN:
 
         # Initialise the networks
         # target_net = DeepQLearningNetwork(state_size, action_size)
-        policy_net = DeepQLearningNetwork(state_size, action_size)
+        self.policy_net = DeepQLearningNetwork(state_size, action_size)
         # optimizer = optim.AdamW(policy_net.parameters(), amsgrad=True) # LEARNING RATE WAS IN HERE, DOES IT NEED TO BE RE-ADDED?
 
         # Load in the weights and parameters from the saved file
         checkpoint = torch.load("model_parameters/dqn_parameters.pt", weights_only=True)
         # target_net.load_state_dict(checkpoint['target_net_state_dict'])
-        policy_net.load_state_dict(checkpoint['policy_net_state_dict'])
+        self.policy_net.load_state_dict(checkpoint['policy_net_state_dict'])
         # optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
         # Set them to evaluation mode.
         # target_net.eval()
-        policy_net.eval()
+        self.policy_net.eval()
 
-        t1 = threading.Thread(target=run)
-        t1.start()
+        if self.draw:
+            t1 = threading.Thread(target=self.run)
+            t1.start()
 
-        self.window.mainloop()
+            self.window.mainloop()
+        else:
+            self.run()
 
-        return metrics
+    def run(self):
+        for x in range(0, self.no_runs):
+            # Initialise the metrics
+            self.metrics['no_moves'].append(0)
+            self.metrics['dist_moved'].append(0)
+
+            print("RUNNING", x)
+
+            start = time.time()
+            terminated = False
+            truncated = False
+            self.env.reset()
+            while not terminated and not truncated:
+                self.metrics['no_moves'][-1] += 1
+                # This is the real distance, for a set velocity at any point. See pigeon class
+                self.metrics['dist_moved'][-1] += 1000 * (0.0138888889/30)
+                observation = torch.tensor(self.env.get_observations(), device=self.device, dtype=torch.float32).flatten().unsqueeze(0)
+                action = torch.tensor([[self.policy_net(observation).max(1).indices.item()]], device=self.device)
+                _, _, terminated, truncated = self.env.step(action.item())
+
+            end = time.time()
+            self.metrics['time_taken'].append(end-start)
+
+            # If still alive and reached loft
+            if terminated:
+                self.metrics['bool_reached_goal'].append(True)
+                self.metrics['bool_died'].append(False)
+                self.metrics['bool_landed'].append(False)
+            else:
+                self.metrics['bool_reached_goal'].append(False)
+                if not self.env.pigeon.alive:
+                    self.metrics['bool_died'].append(True)
+                    self.metrics['bool_landed'].append(False)
+                else:
+                    self.metrics['bool_died'].append(False)
+                    self.metrics['bool_landed'].append(True)
+
+        with open("metric_runs/metrics.pkl", "ab+") as f:
+            pickle.dump(self.metrics, f)
+
+        if self.draw:
+            self.window.destroy()
+
+        print("END")
+
+
 
 # Plot all the graphs for a list full of the dictionaries of metrics values.
 def plot_graphs(metrics):
@@ -202,6 +220,7 @@ def plot_graphs(metrics):
         #     'no_moves': [],
         #     'dist_moved': [],
         #     'bool_reached_goal': [],
+        #     'bool_landed' = [],
         #     'bool_died': [],
         #     'time_taken': []
         # }
@@ -328,6 +347,7 @@ def plot_graphs(metrics):
         ax.bar_label(rects1, padding=3)
         multiplier += 1
 
+
     # Add some text for labels, title and custom x-axis tick labels, etc.
     ax.set_xlabel('No. Pigeons ')
     ax.set_ylabel('Model Type')
@@ -344,20 +364,24 @@ def plot_graphs(metrics):
     plt.show()
 
 
-def run_tests():
+def run_tests(new_run=False):
+    if new_run:
+        # clear the pickle file
+        open("metric_runs/metrics.pkl", "wb").close()
+
+        test_DQN(1, True)
+        test_DQN(1)
+
+    # unpickle the metrics
     metrics = []
-    test = TestDQN()
-    metrics.append(test.test_DQN(1))
-    metrics.append(test.test_DQN(1))
-    # metrics.append(TestDQN(1))
-    # TestDQN(1)
-    # TestDQN(1)
+    with open("metric_runs/metrics.pkl", "rb") as f:
+        while 1:
+            try:
+                metrics.append(pickle.load(f))
+            except EOFError:
+                break
 
-    with open("test.pkl", "wb") as f:
-        pickle.dump(metrics, f)
-
-    # with open("test.pkl", "rb") as f:
-    #     metrics = pickle.load(f)
+    print(metrics)
 
     plot_graphs(metrics)
 
