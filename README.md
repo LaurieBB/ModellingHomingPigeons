@@ -14,3 +14,7 @@ gymnasium - 1.1.1
 lxml-html-clean - 0.4.2
 
 torch - 2.7.0
+
+scikit-image - 0.25.2
+
+requests-html - 0.10.0

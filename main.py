@@ -38,8 +38,8 @@ def tests(draw, generalisability):
     print("time to run: ", end - start)
 
 
-# tests(False, False)
-run_dqn(False)
+tests(False, False)
+# run_dqn(False)
 # run_ga(False)
 
 
