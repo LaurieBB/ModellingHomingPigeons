@@ -29,11 +29,11 @@ def run_dqn(draw):
     end = time.time()
     print("time to run: ", end - start)
 
-# "draw" should be a boolean value indicating if you want the tkinter environment printed
+# "new_run" is a boolean value indicating if you want to run a new set of tests, or show the graphs for the old one.
 # "generalisability" is a boolean value indicating which test you want to run, False=Normal test, True=Generalisability test (see report)
-def tests(draw, generalisability):
+def tests(new_run, generalisability):
     start = time.time()
-    run_tests(draw, generalisability)
+    run_tests(new_run, generalisability)
     end = time.time()
     print("time to run: ", end - start)
 

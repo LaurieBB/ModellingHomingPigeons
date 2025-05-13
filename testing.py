@@ -30,7 +30,7 @@ class testDQNGeneralisability:
         passive_objects, active_objects, geo_mag, villages, towns, cities = environment_objects
 
         self.metrics = {
-            'name': "DQN",
+            'name': "DQN_Generalisability",
             'no_moves': [],
             'dist_moved': [],
             'bool_reached_goal': [],
@@ -370,7 +370,7 @@ class test_GA:
         self.env.load_env(passive_objects, active_objects, geo_mag, villages, towns, cities)
 
         self.metrics = {
-            'name': "DQN",
+            'name': "GA",
             'no_moves': [],
             'dist_moved': [],
             'bool_reached_goal': [],
