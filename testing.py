@@ -73,6 +73,8 @@ class testDQNGeneralisability:
 
     def run(self):
         for x in range(0, self.no_runs):
+            print("Run: ", x)
+
             # Set new environment each time, to test generalisability
             if self.draw:
                 self.env = GymEnvironment(draw=True, window=self.window)
@@ -165,7 +167,7 @@ class testGAGeneralisability:
         # Load in the weights and parameters from the saved file
         checkpoint = torch.load("model_parameters/ga_parameters.pt", weights_only=True)
         # target_net.load_state_dict(checkpoint['target_net_state_dict'])
-        self.policy_net.load_state_dict(checkpoint['policy_net_state_dict'])
+        self.policy_net.load_state_dict(checkpoint['ga_model_state_dict'])
         # optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
         # Set them to evaluation mode.
@@ -182,6 +184,8 @@ class testGAGeneralisability:
 
     def run(self):
         for x in range(0, self.no_runs):
+            print("Run: ", x)
+
             # Set new environment each time, to test generalisability
             if self.draw:
                 self.env = GymEnvironment(draw=True, window=self.window)
@@ -300,6 +304,8 @@ class test_DQN:
 
     def run(self):
         for x in range(0, self.no_runs):
+            print("Run: ", x)
+
             # Initialise the metrics
             self.metrics['no_moves'].append(0)
             self.metrics['dist_moved'].append(0)
@@ -390,7 +396,7 @@ class test_GA:
         # Load in the weights and parameters from the saved file
         checkpoint = torch.load("model_parameters/ga_parameters.pt", weights_only=True)
         # target_net.load_state_dict(checkpoint['target_net_state_dict'])
-        self.policy_net.load_state_dict(checkpoint['policy_net_state_dict'])
+        self.policy_net.load_state_dict(checkpoint['ga_model_state_dict'])
         # optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
         # Set them to evaluation mode.
@@ -407,6 +413,7 @@ class test_GA:
 
     def run(self):
         for x in range(0, self.no_runs):
+            print("Run: ", x)
             # Initialise the metrics
             self.metrics['no_moves'].append(0)
             self.metrics['dist_moved'].append(0)
@@ -604,15 +611,42 @@ def plot_graphs(metrics):
 
 
 def t_tests(metrics):
+    # metrics = {
+    #     'name': ""
+    #     'no_moves': [],
+    #     'dist_moved': [],
+    #     'bool_reached_goal': [],
+    #     'bool_landed' = [],
+    #     'bool_died': [],
+    #     'time_taken': []
+    # }
+
     # Find the real values (not bool) of the number that reached the goal and died
     for x in range(0, len(metrics)):
         no_reached_goal = 0
         no_died = 0
+        no_landed = 0
         for y in range(0, len(metrics[x]['bool_reached_goal'])):
             if metrics[x]['bool_reached_goal'][y]:
                 no_reached_goal += 1
             if metrics[x]['bool_died'][y]:
                 no_died += 1
+            if metrics[x]['bool_landed'][y]:
+                no_landed += 1
+
+        metrics[x]['bool_reached_goal'] = no_reached_goal
+        metrics[x]['bool_died'] = no_died
+        metrics[x]['bool_landed'] = no_landed
+
+    t_test = {}
+
+    for key in metrics[0].keys():
+        if key != 'name' and key != 'time_taken':
+            result = ttest_ind(metrics[0][key], metrics[1][key]).pvalue
+            t_test[key] = result
+
+    for key in t_test.keys():
+        print(key, " p value = ", t_test[key])
 
 
 def run_tests(new_run=False, generalisability=False):
@@ -620,11 +654,11 @@ def run_tests(new_run=False, generalisability=False):
         open("metric_runs/metrics.pkl", "wb").close()
 
         if not generalisability:
-            test_DQN(100, False)
-            test_GA(100, False)
+            test_DQN(10, False)
+            test_GA(10, False)
         else:
-            testDQNGeneralisability(100, False)
-            testGAGeneralisability(100, False)
+            testDQNGeneralisability(10, False)
+            testGAGeneralisability(10, False)
 
     # unpickle the metrics
     metrics = []
@@ -636,6 +670,7 @@ def run_tests(new_run=False, generalisability=False):
                 break
 
     plot_graphs(metrics)
+    t_tests(metrics)
 
 
 

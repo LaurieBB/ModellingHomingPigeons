@@ -39,8 +39,7 @@ def get_mag_values():
             latitude = str(lines[0]).replace(" ", "")
             longitude = str(lines[1]).replace(" ", "")
             altitude = 0.18288
-            #TODO This altitude is 600ft in km, as required by the website. Need to come back and check it is an accurate value
-            # and also write up that I chose to use this value.
+            # This altitude is 600ft in km, as required by the website.
 
             url = get_url(latitude, longitude, altitude)
             res = session.get(url)

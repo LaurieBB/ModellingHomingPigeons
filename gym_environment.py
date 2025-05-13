@@ -143,8 +143,6 @@ class GymEnvironment(gym.Env):
 
         return observations, reward, terminated, truncated
 
-    #Todo come back here and work out which observation method is the best.
-
     # Used to get the current location of the pigeon and the loft (observations) - always returns a list
     def get_observations(self):
         # This returns matrices of the pigeon view, and the loft memory
