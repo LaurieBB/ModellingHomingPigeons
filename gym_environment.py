@@ -104,7 +104,7 @@ class GymEnvironment(gym.Env):
 
         # If alive, updates vision and geomagnetic location.
         if self.pigeon.alive:
-            self.pigeon.pigeon_vision = self.pigeon.getVision(self.passive_objects, self.active_objects) # TODO THIS MIGHT BE UNNECESSARY AND REMOVABLE.
+            self.pigeon.pigeon_vision = self.pigeon.getVision(self.passive_objects, self.active_objects)
             self.pigeon.current_geomag_loc = self.pigeon.updateCurrentGeomag(self.geomag_map)
 
             # Updates the performance metrics
