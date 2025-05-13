@@ -103,3 +103,98 @@ class Predator:
         observations = self.get_observations()
 
         return observations
+
+
+
+# This is a step function taken from gym, but applied to a brand new pigeon to test the outcome of a singular step and return a reward, without editing the environment.
+            def synthetic_step(action):
+                # Calculate pigeon speed
+                hypotenuse = 1000 * (0.0138888889 / 30)  # This ensures constant speed. 0.0138... is the real value of 50mph converted to mps and scaled with 30.
+                pigeon_xv = math.sin(math.radians(action)) * hypotenuse
+                pigeon_yv = math.cos(math.radians(action)) * hypotenuse
+
+                # previous location of the pigeon
+                prev_loc = self.env.pigeon.dist_from_loft
+                self.temp_pigeon.dist_from_loft = self.env.pigeon.dist_from_loft
+
+                if self.env.pigeon.alive:
+                    # Move temp pigeon
+                    self.temp_pigeon.x = self.env.pigeon.x + pigeon_xv
+                    self.temp_pigeon.y = self.env.pigeon.y + pigeon_yv
+
+                # Checks that the pigeon is alive, and not in a predator area, this function also works out probability of death and
+                self.temp_pigeon.pigeonInDanger(self.env.active_objects)
+
+                # If alive, updates vision and geomagnetic location.
+                if self.env.pigeon.alive:
+                    # Updates the performance metrics
+                    loft = [x for x in self.env.active_objects if x.getClass() == "Loft"][0]  # This retrieves the loft instance (There should only be one)
+                    self.temp_pigeon.dist_from_loft = math.sqrt((self.temp_pigeon.x - loft.x) ** 2 + (self.temp_pigeon.y - loft.y) ** 2)
+
+                    # End if pigeon is in same location as loft, it may seem like a low value, however the pigeon is also
+                    if self.temp_pigeon.dist_from_loft <= 20:
+                        print("MY PIGEON IS HOME!!!")
+                        terminated = True
+                        truncated = False
+                    elif self.env.pigeon.no_moves >= 5000:
+                        terminated = False
+                        truncated = True
+                    # No issues.
+                    else:
+                        terminated = False
+                        truncated = False
+                else:
+                    terminated = False
+                    truncated = True
+
+                reward_out = reward_function(prev_loc)
+
+                # Set reward for if it is finished, terminated=reached goal, truncated=died/too many moves
+                if terminated:
+                    reward_out = 10
+                if truncated:
+                    reward_out = -10
+
+                return reward_out
+
+            # todo change this if change reward function in gym_environment
+            def reward_function(prev_loc):
+                reward = 0
+
+                # Sinuosity - how close to the euclidian distance to the value the movement is.
+                pige_start = np.asarray(self.env.pigeon_start_loc)
+                loft_loc = np.asarray(self.env._target_location)
+                current_loc = np.asarray([self.temp_pigeon.x, self.temp_pigeon.y])
+
+                dist_from_euc_line = round(np.abs(np.cross(loft_loc - pige_start, pige_start - current_loc)) / norm(
+                    loft_loc - pige_start) / 10, 3)
+
+                if dist_from_euc_line <= 1:
+                    dist_from_euc_line = 1
+
+                reward += round(1 / dist_from_euc_line, 3)  # THIS HAS AN ERROR WHEN THE PIGEON MOVES BEHIND THE START POINT, IT HAS UNEVEN VALUES.
+
+                # print("VALUE: ", round(1/dist_from_euc_line, 3))
+                # print(dist_from_euc_line)
+
+                dist_from_loft = math.sqrt((current_loc[0] - loft_loc[0]) ** 2 + (current_loc[1] - loft_loc[1]) ** 2)
+
+                # If moving towards home
+                if dist_from_loft < prev_loc:
+                    reward += 1
+
+                # If in predator area
+                for item in self.env.env_orig.active_objects:
+                    if item.getClass() == "Predator":
+                        if in_area(item.x, item.y, self.temp_pigeon.x, self.temp_pigeon.y, item.radius):
+                            reward -= 1
+
+                # If against a wall
+                if self.temp_pigeon.x < 1 or self.temp_pigeon.y < 1 or self.temp_pigeon.x > 999 or self.temp_pigeon.y > 999:
+                    reward -= 3
+
+                # If pigeon can see the loft
+                if self.temp_pigeon.dist_from_loft <= self.temp_pigeon.viewing_distance:
+                    reward += 1
+
+                return reward

@@ -48,12 +48,13 @@ def test():
     window.mainloop()
 
 def genetic_algorithm():
-    genetic_algorithm = GeneticAlgorithm()
+    genetic_algorithm = GeneticAlgorithm(False)
     genetic_algorithm.solve()
 
 start = time.time()
-DQN(False)
+# DQN(False)
+genetic_algorithm()
 end = time.time()
-# print("time to run: ", end - start)
+print("time to run: ", end - start)
 # genetic_algorithm()
 # run_tests()
