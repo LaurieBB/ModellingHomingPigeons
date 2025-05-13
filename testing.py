@@ -12,37 +12,16 @@ from environment import Environment
 from gym_environment import GymEnvironment
 from reinforcement_learning import DQN, DeepQLearningNetwork
 from genetic_algorithm import GeneticAlgorithm
+from scipy.stats import ttest_ind
 
-class TestDQNGeneralisability:
-    def test_DQN_generalisability(self, no_runs=10):
-        metrics = {
-            'name': "DQN-Generalisability",
-            'no_moves': [],
-            'dist_moved': [],
-            'bool_reached_goal': [],
-            'bool_died': [],
-            'time_taken': []
-        }
+class testDQNGeneralisability:
+    def __init__(self, no_runs=10, draw=False):
+        self.no_runs = no_runs
+        self.draw = draw
 
-        # Get the state and action space size from a pickle
-        with open("model_parameters/space_size.pkl", "rb") as f:
-            state_size, action_size = pickle.load(f)
-
-        # Initialise the networks
-        target_net = DeepQLearningNetwork(state_size, action_size)
-        policy_net = DeepQLearningNetwork(state_size, action_size)
-        optimizer = optim.AdamW(policy_net.parameters(),
-                                amsgrad=True)  # LEARNING RATE WAS IN HERE, DOES IT NEED TO BE RE-ADDED?
-
-        # Load in the weights and parameters from the saved file
-        checkpoint = torch.load("model_parameters/dqn_parameters.pt", weights_only=True)
-        target_net.load_state_dict(checkpoint['target_net_state_dict'])
-        policy_net.load_state_dict(checkpoint['policy_net_state_dict'])
-        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-
-        # Set them to evaluation mode.
-        target_net.eval()
-        policy_net.eval()
+        if self.draw:
+            self.window = tk.Tk()
+            self.window.resizable(False, False)
 
         # Take the environment variables
         with open("model_parameters/environment.pkl", "rb") as f:
@@ -50,54 +29,208 @@ class TestDQNGeneralisability:
 
         passive_objects, active_objects, geo_mag, villages, towns, cities = environment_objects
 
-        # Initialise window
-        window = tk.Tk()
-        window.resizable(False, False)
+        self.metrics = {
+            'name': "DQN",
+            'no_moves': [],
+            'dist_moved': [],
+            'bool_reached_goal': [],
+            'bool_landed': [],
+            'bool_died': [],
+            'time_taken': []
+        }
 
-        # Used to ensure that clicking anywhere on the map will move the pigeon to that location.
-        # window.bind("<Button-1>", self.env.env_orig.click_handler)
+        # Set the device to run on GPU, if applicable
+        self.device = torch.device(
+            "cpu"
+        )
 
-        # Run the tests and store the metrics
-        def run():
-            for x in range(0, no_runs):
-                # Set new environment each time, to test generalisability
-                self.env = GymEnvironment(draw=True, window=window)
+        # Get the state and action space size from a pickle
+        with open("model_parameters/space_size.pkl", "rb") as f:
+            state_size, action_size = pickle.load(f)
 
-                # Initialise the metrics
-                metrics['no_moves'].append(0)
-                metrics['dist_moved'].append(0)
+        # Initialise the networks
+        # target_net = DeepQLearningNetwork(state_size, action_size)
+        self.policy_net = DeepQLearningNetwork(state_size, action_size)
+        # optimizer = optim.AdamW(policy_net.parameters(), amsgrad=True) # LEARNING RATE WAS IN HERE, DOES IT NEED TO BE RE-ADDED?
 
-                start = time.time()
-                terminated = False
-                truncated = False
-                self.env.reset()
-                while not terminated and not truncated:
-                    metrics['no_moves'].append(1)
-                    # This is the real distance, for a set velocity at any point. See pigeon class
-                    metrics['dist_moved'].append(1000 * (0.0138888889 / 30))
-                    action = policy_net(self.env.get_observations())
-                    _, _, terminated, truncated = self.env.step(action)
+        # Load in the weights and parameters from the saved file
+        checkpoint = torch.load("model_parameters/dqn_parameters.pt", weights_only=True)
+        # target_net.load_state_dict(checkpoint['target_net_state_dict'])
+        self.policy_net.load_state_dict(checkpoint['policy_net_state_dict'])
+        # optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
-                end = time.time()
-                metrics['time_taken'].append(end - start)
+        # Set them to evaluation mode.
+        # target_net.eval()
+        self.policy_net.eval()
 
-                # If still alive and reached loft
-                if terminated:
-                    metrics['bool_reached_goal'].append(True)
-                    metrics['bool_died'].append(False)
+        if self.draw:
+            t1 = threading.Thread(target=self.run)
+            t1.start()
+
+            self.window.mainloop()
+        else:
+            self.run()
+
+    def run(self):
+        for x in range(0, self.no_runs):
+            # Set new environment each time, to test generalisability
+            if self.draw:
+                self.env = GymEnvironment(draw=True, window=self.window)
+
+                # Used to ensure that clicking anywhere on the map will move the pigeon to that location.
+                self.window.bind("<Button-1>", self.env.click_handler)
+            else:
+                self.env = GymEnvironment(draw=False)
+
+            # Initialise the metrics
+            self.metrics['no_moves'].append(0)
+            self.metrics['dist_moved'].append(0)
+
+            start = time.time()
+            terminated = False
+            truncated = False
+            self.env.reset()
+            while not terminated and not truncated:
+                self.metrics['no_moves'][-1] += 1
+                # This is the real distance, for a set velocity at any point. See pigeon class
+                self.metrics['dist_moved'][-1] += 1000 * (0.0138888889 / 30)
+                observation = torch.tensor(self.env.get_observations(), device=self.device,
+                                           dtype=torch.float32).flatten().unsqueeze(0)
+                action = torch.tensor([[self.policy_net(observation).max(1).indices.item()]], device=self.device)
+                _, _, terminated, truncated = self.env.step(action.item())
+
+            end = time.time()
+            self.metrics['time_taken'].append(end - start)
+
+            # If still alive and reached loft
+            if terminated:
+                self.metrics['bool_reached_goal'].append(True)
+                self.metrics['bool_died'].append(False)
+                self.metrics['bool_landed'].append(False)
+            else:
+                self.metrics['bool_reached_goal'].append(False)
+                if not self.env.pigeon.alive:
+                    self.metrics['bool_died'].append(True)
+                    self.metrics['bool_landed'].append(False)
                 else:
-                    metrics['bool_reached_goal'].append(False)
-                    if not self.env.pigeon.alive:
-                        metrics['bool_died'].append(True)
-                    else:
-                        metrics['bool_died'].append(False)
+                    self.metrics['bool_died'].append(False)
+                    self.metrics['bool_landed'].append(True)
 
-        t1 = threading.Thread(target=run)
-        t1.start()
+        with open("metric_runs/metrics.pkl", "ab+") as f:
+            pickle.dump(self.metrics, f)
 
-        window.mainloop()
+        if self.draw:
+            self.window.destroy()
 
-    # TODO ADD SAME FUNCTIONS FOR GA.
+
+class testGAGeneralisability:
+    def __init__(self, no_runs=10, draw=False):
+        self.no_runs = no_runs
+        self.draw = draw
+
+        if self.draw:
+            self.window = tk.Tk()
+            self.window.resizable(False, False)
+
+        # Take the environment variables
+        with open("model_parameters/environment.pkl", "rb") as f:
+            environment_objects = pickle.load(f)
+
+        passive_objects, active_objects, geo_mag, villages, towns, cities = environment_objects
+
+        self.metrics = {
+            'name': "GA_Generalisability",
+            'no_moves': [],
+            'dist_moved': [],
+            'bool_reached_goal': [],
+            'bool_landed': [],
+            'bool_died': [],
+            'time_taken': []
+        }
+
+        # Set the device to run on GPU, if applicable
+        self.device = torch.device(
+            "cpu"
+        )
+
+        # Get the state and action space size from a pickle
+        with open("model_parameters/space_size.pkl", "rb") as f:
+            state_size, action_size = pickle.load(f)
+
+        # Initialise the networks
+        # target_net = DeepQLearningNetwork(state_size, action_size)
+        self.policy_net = DeepQLearningNetwork(state_size, action_size)
+        # optimizer = optim.AdamW(policy_net.parameters(), amsgrad=True) # LEARNING RATE WAS IN HERE, DOES IT NEED TO BE RE-ADDED?
+
+        # Load in the weights and parameters from the saved file
+        checkpoint = torch.load("model_parameters/ga_parameters.pt", weights_only=True)
+        # target_net.load_state_dict(checkpoint['target_net_state_dict'])
+        self.policy_net.load_state_dict(checkpoint['policy_net_state_dict'])
+        # optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+
+        # Set them to evaluation mode.
+        # target_net.eval()
+        self.policy_net.eval()
+
+        if self.draw:
+            t1 = threading.Thread(target=self.run)
+            t1.start()
+
+            self.window.mainloop()
+        else:
+            self.run()
+
+    def run(self):
+        for x in range(0, self.no_runs):
+            # Set new environment each time, to test generalisability
+            if self.draw:
+                self.env = GymEnvironment(draw=True, window=self.window)
+
+                # Used to ensure that clicking anywhere on the map will move the pigeon to that location.
+                self.window.bind("<Button-1>", self.env.click_handler)
+            else:
+                self.env = GymEnvironment(draw=False)
+
+            # Initialise the metrics
+            self.metrics['no_moves'].append(0)
+            self.metrics['dist_moved'].append(0)
+
+            start = time.time()
+            terminated = False
+            truncated = False
+            self.env.reset()
+            while not terminated and not truncated:
+                self.metrics['no_moves'][-1] += 1
+                # This is the real distance, for a set velocity at any point. See pigeon class
+                self.metrics['dist_moved'][-1] += 1000 * (0.0138888889 / 30)
+                observation = torch.tensor(self.env.get_observations(), device=self.device,
+                                           dtype=torch.float32).flatten().unsqueeze(0)
+                action = torch.tensor([[self.policy_net(observation).max(1).indices.item()]], device=self.device)
+                _, _, terminated, truncated = self.env.step(action.item())
+
+            end = time.time()
+            self.metrics['time_taken'].append(end - start)
+
+            # If still alive and reached loft
+            if terminated:
+                self.metrics['bool_reached_goal'].append(True)
+                self.metrics['bool_died'].append(False)
+                self.metrics['bool_landed'].append(False)
+            else:
+                self.metrics['bool_reached_goal'].append(False)
+                if not self.env.pigeon.alive:
+                    self.metrics['bool_died'].append(True)
+                    self.metrics['bool_landed'].append(False)
+                else:
+                    self.metrics['bool_died'].append(False)
+                    self.metrics['bool_landed'].append(True)
+
+        with open("metric_runs/metrics.pkl", "ab+") as f:
+            pickle.dump(self.metrics, f)
+
+        if self.draw:
+            self.window.destroy()
+
 
 class test_DQN:
     def __init__(self, no_runs=10, draw=False):
@@ -171,8 +304,6 @@ class test_DQN:
             self.metrics['no_moves'].append(0)
             self.metrics['dist_moved'].append(0)
 
-            print("RUNNING", x)
-
             start = time.time()
             terminated = False
             truncated = False
@@ -208,8 +339,113 @@ class test_DQN:
         if self.draw:
             self.window.destroy()
 
-        print("END")
+class test_GA:
+    def __init__(self, no_runs=10, draw=False):
+        self.no_runs = no_runs
+        self.draw = draw
 
+        if self.draw:
+            self.window = tk.Tk()
+            self.window.resizable(False, False)
+
+        # Take the environment variables
+        with open("model_parameters/environment.pkl", "rb") as f:
+            environment_objects = pickle.load(f)
+
+        passive_objects, active_objects, geo_mag, villages, towns, cities = environment_objects
+
+        if self.draw:
+            self.env = GymEnvironment(draw=True, window=self.window)
+
+            # Used to ensure that clicking anywhere on the map will move the pigeon to that location.
+            self.window.bind("<Button-1>", self.env.click_handler)
+        else:
+            self.env = GymEnvironment(draw=False)
+        self.env.load_env(passive_objects, active_objects, geo_mag, villages, towns, cities)
+
+        self.metrics = {
+            'name': "DQN",
+            'no_moves': [],
+            'dist_moved': [],
+            'bool_reached_goal': [],
+            'bool_landed': [],
+            'bool_died': [],
+            'time_taken': []
+        }
+
+        # Set the device to run on GPU, if applicable
+        self.device = torch.device(
+            "cpu"
+        )
+
+        # Get the state and action space size from a pickle
+        with open("model_parameters/space_size.pkl", "rb") as f:
+            state_size, action_size = pickle.load(f)
+
+        # Initialise the networks
+        # target_net = DeepQLearningNetwork(state_size, action_size)
+        self.policy_net = DeepQLearningNetwork(state_size, action_size)
+        # optimizer = optim.AdamW(policy_net.parameters(), amsgrad=True) # LEARNING RATE WAS IN HERE, DOES IT NEED TO BE RE-ADDED?
+
+        # Load in the weights and parameters from the saved file
+        checkpoint = torch.load("model_parameters/ga_parameters.pt", weights_only=True)
+        # target_net.load_state_dict(checkpoint['target_net_state_dict'])
+        self.policy_net.load_state_dict(checkpoint['policy_net_state_dict'])
+        # optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+
+        # Set them to evaluation mode.
+        # target_net.eval()
+        self.policy_net.eval()
+
+        if self.draw:
+            t1 = threading.Thread(target=self.run)
+            t1.start()
+
+            self.window.mainloop()
+        else:
+            self.run()
+
+    def run(self):
+        for x in range(0, self.no_runs):
+            # Initialise the metrics
+            self.metrics['no_moves'].append(0)
+            self.metrics['dist_moved'].append(0)
+
+            start = time.time()
+            terminated = False
+            truncated = False
+            self.env.reset()
+            while not terminated and not truncated:
+                self.metrics['no_moves'][-1] += 1
+                # This is the real distance, for a set velocity at any point. See pigeon class
+                self.metrics['dist_moved'][-1] += 1000 * (0.0138888889 / 30)
+                observation = torch.tensor(self.env.get_observations(), device=self.device,
+                                           dtype=torch.float32).flatten().unsqueeze(0)
+                action = torch.tensor([[self.policy_net(observation).max(1).indices.item()]], device=self.device)
+                _, _, terminated, truncated = self.env.step(action.item())
+
+            end = time.time()
+            self.metrics['time_taken'].append(end - start)
+
+            # If still alive and reached loft
+            if terminated:
+                self.metrics['bool_reached_goal'].append(True)
+                self.metrics['bool_died'].append(False)
+                self.metrics['bool_landed'].append(False)
+            else:
+                self.metrics['bool_reached_goal'].append(False)
+                if not self.env.pigeon.alive:
+                    self.metrics['bool_died'].append(True)
+                    self.metrics['bool_landed'].append(False)
+                else:
+                    self.metrics['bool_died'].append(False)
+                    self.metrics['bool_landed'].append(True)
+
+        with open("metric_runs/metrics.pkl", "ab+") as f:
+            pickle.dump(self.metrics, f)
+
+        if self.draw:
+            self.window.destroy()
 
 
 # Plot all the graphs for a list full of the dictionaries of metrics values.
@@ -334,17 +570,22 @@ def plot_graphs(metrics):
     for z in range(0, len(metrics)):
         no_reached_goal = 0
         no_died = 0
+        no_lost = 0
         for y in range(0, len(metrics[z]['bool_reached_goal'])):
             if metrics[z]['bool_reached_goal'][y]:
                 no_reached_goal += 1
             if metrics[z]['bool_died'][y]:
                 no_died += 1
+            if metrics[z]['bool_landed'][y]:
+                no_lost += 1
 
         offset = width * multiplier
         rects = ax.barh(x + offset, no_reached_goal, width, label="No. Reached Loft")
         rects1 = ax.barh(x + offset, no_died, width, label="No. Eaten by Predator")
+        rects2 = ax.barh(x + offset, no_died, width, label="No. Who got Lost")
         ax.bar_label(rects, padding=3)
         ax.bar_label(rects1, padding=3)
+        ax.bar_label(rects2, padding=3)
         multiplier += 1
 
 
@@ -359,18 +600,31 @@ def plot_graphs(metrics):
                     alpha=0.5)
 
 
-    # Significance tests, for continuous variables (no_moves, dist_moved) to see if there is a significant difference.
-
     plt.show()
 
 
-def run_tests(new_run=False):
+def t_tests(metrics):
+    # Find the real values (not bool) of the number that reached the goal and died
+    for x in range(0, len(metrics)):
+        no_reached_goal = 0
+        no_died = 0
+        for y in range(0, len(metrics[x]['bool_reached_goal'])):
+            if metrics[x]['bool_reached_goal'][y]:
+                no_reached_goal += 1
+            if metrics[x]['bool_died'][y]:
+                no_died += 1
+
+
+def run_tests(new_run=False, generalisability=False):
     if new_run:
-        # clear the pickle file
         open("metric_runs/metrics.pkl", "wb").close()
 
-        test_DQN(1, True)
-        test_DQN(1)
+        if not generalisability:
+            test_DQN(100, False)
+            test_GA(100, False)
+        else:
+            testDQNGeneralisability(100, False)
+            testGAGeneralisability(100, False)
 
     # unpickle the metrics
     metrics = []
@@ -381,9 +635,8 @@ def run_tests(new_run=False):
             except EOFError:
                 break
 
-    print(metrics)
-
     plot_graphs(metrics)
+
 
 
 
